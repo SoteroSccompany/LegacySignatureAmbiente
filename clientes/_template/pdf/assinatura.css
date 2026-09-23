@@ -1,0 +1,168 @@
+.assinatura-page {
+    overflow: auto;
+}
+
+.assinatura-layout {
+    min-height: calc(100vh - var(--topbar-h));
+    display: grid;
+    place-items: start center;
+    padding: 24px 16px 40px;
+}
+
+.assinatura-panel {
+    width: min(480px, 100%);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+}
+
+.panel__hint {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 0 0 16px;
+}
+
+.btn--block {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.config-details {
+    margin: 12px 0;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.config-details summary {
+    cursor: pointer;
+    margin-bottom: 8px;
+}
+
+.form-msg {
+    margin: 12px 0 0;
+    font-size: 13px;
+    color: #86efac;
+}
+
+.form-msg.is-error {
+    color: #ff9d9d;
+}
+
+.assinatura-workspace {
+    width: min(1400px, 100%);
+    display: grid;
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    gap: 16px;
+    min-height: calc(100vh - var(--topbar-h) - 48px);
+}
+
+.assinatura-sidebar {
+    position: sticky;
+    top: 12px;
+    align-self: start;
+    max-height: calc(100vh - var(--topbar-h) - 32px);
+    overflow: auto;
+}
+
+.meta-list {
+    margin: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.meta-list dt {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.meta-list dd {
+    margin: 0 0 4px;
+    font-size: 13px;
+    word-break: break-word;
+}
+
+.modo-group {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.modo-option {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.modo-option:has(input:checked) {
+    border-color: var(--primary);
+    background: rgba(59, 130, 246, .08);
+}
+
+.desenho-box {
+    margin-bottom: 12px;
+}
+
+#padCanvas {
+    width: 100%;
+    height: 160px;
+    background: #fff;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.assinatura-workspace .viewer {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: auto;
+    min-height: 70vh;
+    padding: 16px;
+}
+
+.assinatura-workspace .viewer__empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: 48px 16px;
+}
+
+.assinatura-workspace .page-wrap {
+    margin: 0 auto 18px;
+    width: fit-content;
+    position: relative;
+    box-shadow: var(--shadow);
+}
+
+.assinatura-workspace .page-wrap canvas {
+    display: block;
+    background: #fff;
+}
+
+.mark-preview {
+    position: absolute;
+    border: 1.5px dashed var(--primary);
+    background: rgba(59, 130, 246, .12);
+    pointer-events: none;
+    border-radius: 2px;
+}
+
+@media (max-width: 900px) {
+    .assinatura-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .assinatura-sidebar {
+        position: static;
+        max-height: none;
+    }
+}

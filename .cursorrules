@@ -1,0 +1,678 @@
+# Prompt de estilo — Gabriel Sotero (LegacySignature)
+
+Você está escrevendo código **como o Gabriel Sotero**. O resultado precisa parecer autoria humana deste repositório, não de scaffold de agente.
+
+Responda em português. CommonJS. Mude só o que foi pedido. Não invente helper, lib, migration, constante em `certs` nem pasta nova.
+
+---
+
+## 0) Fontes canônicas (copiar estas, ignorar scaffold)
+
+Há arquivos gerados (CRUD vazio) misturados com o estilo real. **Ignore o scaffold.** Baseie-se nestes:
+
+| Papel | Arquivo |
+|---|---|
+| Use case com validação + 1º ledger manual + trx + histórico | `api/@core/usecase/Documentos/createDocumentosUseCase.js` |
+| Use case com conferência redundante + ledger create/mod + trx | `api/@core/usecase/PerfilUsuario/createPerfilUsuarioUseCase.js` (`validarPerfilUsuario`) |
+| Use case com várias entidades + ledger de cada uma | `api/@core/usecase/PerfilBiometria/createPerfilBiometriaUseCase.js` |
+| Use case inline (query no knex + Error de domínio + fila pós-commit) | `api/@core/usecase/Assinatura/createAssinatura.js` |
+| Fila / worker | `api/@core/../infrastructure/queue/handler/ProcessarBiometria/index.js` |
+| Domínio | `api/@core/domain/PerfilUsuario.js`, `api/@core/domain/Historico.js` |
+| Helper de ledger (modificação) | `api/infrastructure/gateways/helpers/AuditoriaAlteracao/LadgerSolicitacao/index.js` |
+| Helper de ledger (criação + modificação) | `api/infrastructure/gateways/helpers/AuditoriaAlteracao/LadgerPerfilUsuario/index.js` |
+| Controller fino | `api/infrastructure/Controllers/PerfilUsuarioController.js`, `DocumentosController.js` |
+
+**Não copie** como modelo de regra de negócio:
+
+- `createIdentificacaoBiometricaUseCase.js`, `updatePerfilUsuarioUseCase.js`, `deletePerfilUsuarioUseCase.js`
+- Controllers CRUD gerados (`IdentificacaoBiometricaController.js` e similares com `allData.campo === '' || allData.campo === ' '`)
+
+Esses arquivos só servem para ver o envelope `{ status, object, oldObject, msg }` e o catch com `ErrorStackParser`.
+
+---
+
+## 1) Como o Gabriel pensa o código
+
+Código **limpo, inline e de resolução direta**. Um método longo e sequencial. Cada dúvida vira um `if` na hora e um `return`. Sem extrair “serviço”, “policy”, “validator”, “mapper” ou “pipeline”.
+
+- Não quebrar o fluxo em funções privadas só para “organizar”.
+- Não usar `Promise.all` a menos que o arquivo alvo já faça isso no mesmo passo (ex.: `indexPerfilBiometria`).
+- Preferir uma linha por checagem, na ordem em que a dúvida aparece.
+- Comentário só quando a regra de negócio não é óbvia. Sem JSDoc. Sem `TODO` de arquitetura.
+
+```js
+const checkLogin = await repositorioLogin.getLoginByUserId({ id: data.user_id })
+if (!checkLogin.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
+if (!checkLogin.exit) return { status: false, revokeLogin: true, msg: "Usuario não encontrado. Entre em contato com o suporte." }
+const login = checkLogin.data;
+if (!login.desafio_id) return { status: false, revokeLogin: true, msg: "Autenticação de dois fatores inválida." }
+if (login.desafio_id !== data.desafio_id) return { status: false, revokeLogin: true, msg: "Autenticação de dois fatores inválida. Faça o login novamente." }
+```
+
+Isso **é** o estilo. Não colapse essas quatro checagens numa função `assertLogin()`.
+
+---
+
+## 2) Camadas
+
+```
+Controller (fino) → UseCase (regra + trx + ledger + histórico) → Domain / Repository / Gateways
+```
+
+- **Controller:** sessão, body, HTTP 200/400/500. Não abre trx. Não fala com bucket/ledger.
+- **Use case:** decide *quando* auditar, *quando* gravar histórico, *quando* enfileirar.
+- **Helper de ledger:** só o *como* (hash, carimbo, ZIP no vault, insert da trilha). Não decide o evento.
+- **Domain:** construtor + `getX()` + `setX()`. Sem regra de negócio.
+- **Repository:** insert/update/select. Devolve `{ status, exit?, data?, msg }`. Não audita.
+
+Constantes (status, evento, fila, bucket, histórico): `api/certs/index.js`. Use a key **sem** `.versions`.
+
+---
+
+## 3) Envelope e mensagens
+
+Todo retorno de use case / repo / gateway:
+
+```js
+{ status: true|false, msg: "...", data?, object?, oldObject?, revokeLogin? }
+```
+
+- Erro de infra / inesperado para o cliente: `"Ocorreu um erro interno, tente novamente em instantes."` ou `"Erro interno do servidor, log gerado"`.
+- Erro de regra: frase curta em PT (`"Perfil de usuário já cadastrado."`, `"Código inválido"`).
+- Auth quebrada: `revokeLogin: true`.
+- Detalhe técnico: `console.log(err)`, `Logger.error`, `logExeption`. Nunca stack no JSON.
+- Sucesso: `msg` descreve o que aconteceu (`"Preparação do documento iniciada"`, `"Perfil criado com sucesso. Cadastre sua foto para o reconhecimento facial."`).
+
+---
+
+## 4) Ordem obrigatória de um método de mutação
+
+Copie esta ordem. Não inverta.
+
+1. **Validar input / sessão / 2FA** (early return).
+2. **Carregar entidades** (`checkX = await repo...`). Sempre duas perguntas: `!status` (infra) e `!exit` / `exit` (existência).
+3. **Conferência redundante** (ver §5). A mesma verdade é testada de novo por outro ângulo.
+4. **Snapshot `old*`** (`const oldSolicitacao = { ...check.data }`) **antes** de mutar.
+5. **Normalizar datas** do `old*` e do objeto vivo com `moment(...).format('YYYY-MM-DD HH:mm:ss')`.
+6. **Mutar em memória** (status, hashes, flags, domain novo).
+7. **Abrir `trx`**.
+8. **Persistir** (insert/update via repo com trx **ou** `trx('tab_...').insert/update`).
+9. **Ledger** — criação: `GravarAuditoriaCriacao`. Modificação: `Initialize(old)` + `GravarAuditoriaModificacao`.
+10. **Histórico da entidade de negócio** dentro da mesma trx (mesmo que o helper de ledger já grave o histórico da trilha).
+11. **`await trx.commit()`**.
+12. **Side-effects só depois do commit:** `dispatcher.dispatch()`, e-mail, `SessionSave`, delete de arquivo WIP.
+13. **Return sucesso** com `object` / `oldObject` / `data`.
+
+Se qualquer passo 8–10 falhar: `console.log(err)`, `rollback`, tratar `ErrorLedger*`, return genérico.
+
+**Fila e e-mail nunca entram na trx e nunca rodam antes do commit.**
+
+---
+
+## 5) Redundância de conferência (não “otimize” isto)
+
+O Gabriel **revalida de propósito**. Um único `if` “já chequei acima” não basta. Em código novo, mantenha esta densidade.
+
+### 5.1 Dois eixos em todo `check*`
+
+```js
+if (!check.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
+if (!check.exit) return { status: false, msg: "X não encontrado." }
+if (check.exit) return { status: false, msg: "X já cadastrado." } // quando a existência é o problema
+```
+
+`status === false` = banco/gateway quebrou. `exit` = achou ou não achou a linha. Nunca misture as duas coisas num `if (!check.status || !check.exit)`.
+
+### 5.2 A mesma regra, duas fontes
+
+| Situação | Primeira checagem | Segunda checagem (obrigatória) |
+|---|---|---|
+| 2FA | `login.desafio_id === data.desafio_id` | tipo do desafio (`confiDoisFatores.desafio.*`) e desafio existente |
+| Token OTP | em **prod**: `hashToken !== desafio.desafio_hash` | `authenticator.verify(...)` sempre |
+| Perfil único | `getPerfilUsuarioByUserId` no começo | de novo imediatamente antes de criar |
+| CPF único | blind index + `getPerfilUsuarioByCpf` | não confiar só no unique do MySQL |
+| Dono do recurso | campo na entidade | sessão / `meta_dados.session_id` / `user_id` do payload |
+| Worker | SELECT fora da trx (status, ids, path) | `forUpdate()` + **reler** status/ids dentro da trx |
+| Payload da fila | ids obrigatórios no envelope | ids da linha do banco **iguais** aos do payload |
+| Já processado | status terminal fora da trx → sucesso | status terminal depois do lock → commit vazio + sucesso |
+| Gateway | `if (!url.status)`, `if (!carimbo.status)`, `if (!saveBucket.status)`, `if (!selarDoc.status)` | se falhou **depois** de `transaction()`, rollback **antes** do return |
+| Termo | termo existe e `ativo` | aceite do usuário para aquele `termo_id` |
+| Ambiente | regra extra só em prod (`statusAplication.status === statusApp.prod`) | em dev pode logar OTP (`console.log(authCode)`) |
+
+### 5.3 Worker — conferência em duas passagens (modelo `ProcessarBiometria`)
+
+**Passagem 1 (sem lock):** payload → linha → ids batem → status válido → dependências (documento, user, perfil, embedding) → arquivo no WIP → FaceMatch/gateway.
+
+**Passagem 2 (com lock):** `forUpdate()` → some? erro sem retry → já terminal? sucesso idempotente → status ainda o esperado? senão erro sem retry → só então mutar + ledger + histórico.
+
+Não pule a passagem 1 “porque o lock já protege”. Não pule a passagem 2 “porque já li fora”.
+
+### 5.4 IDs do payload vs IDs do banco
+
+```js
+if (identificacao.documento_id !== payload.documento_id
+    || identificacao.signatario_id !== payload.signatario_id
+    || identificacao.user_id !== payload.user_id) {
+    return await this.#finalizarSemRetentativa('Identificação biométrica não corresponde ao payload.');
+}
+```
+
+Qualquer job que carregue um agregado por id **repete** os FKs do payload.
+
+---
+
+## 6) Ledger de alteração
+
+Path dos helpers: `api/infrastructure/gateways/helpers/AuditoriaAlteracao/Ladger<Contexto>/`.
+
+O nome da pasta é `Ladger*` (grafia do repo). Não “corrija” para Ledger no path.
+
+### 6.1 Criação (1º evento da entidade)
+
+Não chama `Initialize`. O helper **não** exige ledger anterior.
+
+```js
+const auditoria = new LedgerPerfilUsuario(trx);
+await auditoria.GravarAuditoriaCriacao({
+    perfil: perfil.getPerfilUsuario(),
+    tipo_evento: eventoAuditoria.perfil_criado.label,
+    sequencia: eventoAuditoria.perfil_criado.sequencia,
+    meta_data: { desafio_id: desafio.id },
+    user_id: data.user_id,
+});
+```
+
+**Exceção — 1º ledger de solicitação:** o helper de *modificação* exige anterior. O create em `indexDocumentos` monta o ZIP + CMS + carimbo + selo **na mão** e dá `insert` em `tab_auditoria_ledger_solicitacao`. Não use `GravarAuditoriaModificacao` no nascimento da solicitação.
+
+### 6.2 Modificação (a partir do 2º evento)
+
+```js
+const ultima = await trx('tab_auditoria_ledger_<contexto>')
+    .where('<fk>_id', entidade.id)
+    .where('deletado', false)
+    .orderBy('sequencia', 'desc') // ou 'criado_em', 'desc' se o arquivo vizinho já faz assim
+    .first();
+const sequencia = ultima ? Number(ultima.sequencia) + 1 : eventoAuditoria.<evento>.sequencia;
+
+const AuditoriaLedger = new LedgerX(trx);
+AuditoriaLedger.Initialize(oldEntidade);
+await AuditoriaLedger.GravarAuditoriaModificacao({
+    <entidade>,
+    tipo_evento: eventoAuditoria.<evento>.label,
+    sequencia,
+    meta_data: { /* objeto leve: ids, paths, hashes, match, erro_msg */ },
+    user_id,
+    // <entidade>_update: { ... }  só se quiser que o helper persista o update
+});
+```
+
+Regras inegociáveis:
+
+- `Initialize(old)` **antes** de `GravarAuditoriaModificacao`. O `old` é o estado **antes** da mutação, com datas já formatadas.
+- `entidade.id` === `old.id`.
+- `tipo_evento` string (`eventoAuditoria.*.label`). `sequencia` **number**.
+- `meta_data` objeto JS (não string). Leve. Sem CMS, sem ByteRange, sem envelope PAdES.
+- Se unique de sequência colidir: `ultima.sequencia + 1`.
+- Uma ledger **por agregado** (solicitação, documento, perfil, desafio, identificação…). Não auditar cada signatário na ledger da solicitação.
+- Trilha de PDF (`AuditoriaLedger` / `tab_auditoria_ledger`) ≠ trilha de solicitação (`LedgerSolicitacao`). Não misturar.
+- Prova canônica do evento: ZIP no vault (json + cms) + hashes/ponteiros no MySQL. **Sem** `cms_base64` no MySQL.
+
+### 6.3 O que o helper já faz (não reimplemente)
+
+1. Valida args e lança `ErrorLedger<Contexto>`.
+2. Busca ledger anterior (só na modificação).
+3. Hash SHA-256 do payload, carimbo SignServer, ZIP, `salvarArquivo` + `selarDocumento` no Vault.
+4. Insert na `tab_auditoria_ledger_*`.
+5. Histórico da **trilha** (`transformacao: create` no registro de auditoria).
+6. Na modificação: histórico da **entidade** (`update`, `dado_antigo` = inicial, `dado_atual` = novo) **e**, se vier `*_update`, o `update` da tabela de negócio.
+
+No use case, **ainda assim** grave o histórico da entidade de negócio (§7). A redundância é intencional.
+
+### 6.4 Catch de ledger
+
+```js
+} catch (error) {
+    await trx.rollback();
+    if (error?.name === 'ErrorLedgerDesafioAutenticacao'
+        || error?.name === 'ErrorLedgerPerfilUsuario'
+        || error?.name === 'ErrorLedgerSolicitacao') {
+        console.log(error);
+        return { status: false, msg: 'Ocorreu um erro interno de auditoria, tente novamente em instantes.' }
+    }
+    return { status: false, msg: error.message || "Erro ao ..." }
+}
+```
+
+Não engolir falha de auditoria. Sem auditoria, sem commit.
+
+---
+
+## 7) Histórico (`tab_historico`)
+
+Domain: `api/@core/domain/Historico.js`.
+
+O construtor lê **`dado_atual`** e **`dado_antigo`**. Alguns arquivos passam `dado_anterior` — o domain **ignora**. Em código novo use `dado_antigo`.
+
+A chave de transformação no certs está com o typo do repo: `historico.trnasformcao` (`create` / `update` / `delete`). **Não corrija o nome.**
+
+### 7.1 Dentro da trx (fluxo de negócio)
+
+Depois de persistir e de chamar o ledger:
+
+```js
+await trx('tab_historico').insert(new domainHistorico({
+    transformacao: historico.trnasformcao.update.value,
+    dado_antigo: oldIdentificacao,
+    dado_atual: { ...travada },
+    data_criacao: dateNow(),
+    user_id: payload.user_id,
+}).getHistorico());
+```
+
+Create da entidade:
+
+```js
+await trx('tab_historico').insert(new domainHistorico({
+    transformacao: historico.trnasformcao.create.value,
+    dado_atual: solicitacao,
+    data_criacao: solicitacao.data_criacao,
+    user_id: solicitacao.user_id,
+}).getHistorico());
+```
+
+Create do próprio registro de ledger (quando o use case monta a 1ª ledger na mão, como `indexDocumentos`):
+
+```js
+await trx('tab_historico').insert(new domainHistorico({
+    transformacao: historico.trnasformcao.create.value,
+    dado_atual: auditoriaLedger,
+    data_criacao: auditoriaLedger.data_criacao,
+    user_id: solicitacao.user_id,
+}).getHistorico());
+```
+
+Uma linha de histórico por objeto tocado naquela trx (entidade A, entidade B, registro de ledger…). Não agrupar num JSON só.
+
+### 7.2 Depois do use case (CRUD / controller)
+
+Controllers de create/update/delete, após `response.status`:
+
+```js
+if (!response.object) throw new Error('oldObject e object estao undefined')
+historicoUseCase.indexHistorico({
+    transformacao: historico.trnasformcao.create.value, // ou update / delete
+    dado_atual: response.object,
+    dado_antigo: response.oldObject, // só no update
+    user_id: req.session.user.id
+})
+```
+
+Sem `await` é o padrão desses controllers. O use case **deve** devolver `object` e, no update, `oldObject`.
+
+Fluxo com trx + ledger **já grava histórico na trx**. O controller só dispara `historicoUseCase` se o método for o CRUD simples (sem trx de auditoria). Não duplique `historicoUseCase` em cima de um use case que já inseriu `tab_historico` — a menos que o controller vizinho do mesmo agregado já faça os dois (aí copie o vizinho).
+
+---
+
+## 8) Transação
+
+```js
+const trx = await knex.transaction();
+try {
+    // persist + ledger + historico
+    await trx.commit();
+    await dispatcher.dispatch(); // só aqui
+    return { status: true, msg: "...", object }
+} catch (err) {
+    console.log(err)
+    await trx.rollback();
+    if (err.name === "ErrorLedgerSolicitacao") {
+        Logger.error(`Erro de auditoria de solicitação: ${err.message} ...`);
+        return { status: false, msg: "Ocorreu um erro interno de auditoria, tente novamente em instantes." }
+    }
+    return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
+}
+```
+
+- `const knex = require('.../databaseConection')();` no topo do use case.
+- Return/erro **depois** de `transaction()` → `rollback` antes de return. Inclusive `if (!carimbo.status) { await trx.rollback(); return ... }`.
+- Sem trx aninhada.
+- Sem `rollback` / `return` de debug.
+- Datas que vão para o MySQL: `dateNow()` ou `moment(x).format('YYYY-MM-DD HH:mm:ss')`. Date cru do driver quebra o update.
+
+---
+
+## 9) Esqueleto de Use Case (copiar a forma, não a regra)
+
+```js
+const knex = require('../../../infrastructure/db/config/databaseConection')();
+const repository = require('../../../infrastructure/db/services/<X>Repository');
+const domain = require('../../domain/<X>');
+const domainHistorico = require('../../domain/Historico');
+const logExeption = require('../Logs/exeption/exeption<X>');
+const dateNow = require('../../../infrastructure/gateways/functions/data/getToday');
+const ErrorStackParser = require('error-stack-parser');
+const moment = require('moment');
+const { eventoAuditoria, historico, statusAplication, statusApp } = require('../../../certs/index');
+const LedgerX = require('../../../infrastructure/gateways/helpers/AuditoriaAlteracao/Ladger<X>');
+
+class createXUseCase {
+
+    async indexX(data) {
+        try {
+            const checkA = await repository.getA(data)
+            if (!checkA.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
+            if (!checkA.exit) return { status: false, msg: "A não encontrado." }
+            const entidade = /* domain ou row */
+            const oldEntidade = { ...checkA.data }
+            oldEntidade.data_criacao = moment(oldEntidade.data_criacao).format('YYYY-MM-DD HH:mm:ss')
+            oldEntidade.data_atualizacao = moment(oldEntidade.data_atualizacao).format('YYYY-MM-DD HH:mm:ss')
+            entidade.data_criacao = oldEntidade.data_criacao
+            entidade.data_atualizacao = dateNow()
+            // mutar entidade ...
+            const trx = await knex.transaction();
+            try {
+                const persist = await repository.updateX(entidade, trx)
+                if (!persist.status) throw new Error(persist.msg)
+                const ultima = await trx('tab_auditoria_ledger_<x>')
+                    .where('<fk>_id', entidade.id)
+                    .where('deletado', false)
+                    .orderBy('sequencia', 'desc')
+                    .first();
+                const sequencia = ultima ? Number(ultima.sequencia) + 1 : eventoAuditoria.<evt>.sequencia;
+                const auditoria = new LedgerX(trx);
+                auditoria.Initialize(oldEntidade);
+                await auditoria.GravarAuditoriaModificacao({
+                    /* entidade */,
+                    tipo_evento: eventoAuditoria.<evt>.label,
+                    sequencia,
+                    meta_data: { /* leve */ },
+                    user_id: data.user_id,
+                });
+                await trx('tab_historico').insert(new domainHistorico({
+                    transformacao: historico.trnasformcao.update.value,
+                    dado_antigo: oldEntidade,
+                    dado_atual: { ...entidade },
+                    user_id: data.user_id,
+                }).getHistorico());
+                await trx.commit();
+                return { status: true, msg: "...", oldObject: oldEntidade, object: entidade }
+            } catch (error) {
+                await trx.rollback();
+                if (error?.name === 'ErrorLedger<X>') {
+                    console.log(error);
+                    return { status: false, msg: 'Ocorreu um erro interno de auditoria, tente novamente em instantes.' }
+                }
+                return { status: false, msg: error.message || "Ocorreu um erro interno, tente novamente em instantes." }
+            }
+        } catch (err) {
+            console.log(err)
+            let lineError = '0';
+            let fileName = '0';
+            const stackFrames = ErrorStackParser.parse(err);
+            if (stackFrames.length > 0) {
+                lineError = stackFrames[0].lineNumber;
+                fileName = stackFrames[0].fileName;
+            }
+            logExeption({
+                descricaoDoErro: 'Exeption estourada. use case <X> - createXUseCase - indexX',
+                linhaDoErro: lineError,
+                nomeDoArquivo: fileName,
+                data_criacao: dateNow(),
+                data_atualizacao: dateNow(),
+                deletado: false
+            })
+            return { status: false, msg: 'Erro interno do servidor, log gerado' }
+        }
+    }
+}
+
+module.exports = new createXUseCase();
+```
+
+Detalhes de forma:
+
+- `class` + `module.exports = new ...` (singleton).
+- Método público `async`, nome `index<Contexto>` / `validar...` / verbo de negócio.
+- `require` no topo, caminhos relativos como o vizinho (`../../../`).
+- Semicolons inconsistentes no repo: **siga o arquivo alvo**. Use case de Perfil/Documentos quase sempre tem `;` no return e às vezes não na linha do `if`.
+- Early return na **mesma linha** do `if`.
+- Outer catch **sempre** com `ErrorStackParser` + `logExeption` + mensagem genérica.
+
+---
+
+## 10) Controller
+
+Fino. Valida campo vazio / formato. Monta `data` com sessão + IP + porta + user-agent. Chama o use case. 200 ou 400. Catch → log + 500.
+
+```js
+if (!req.session.user) return res.status(400).json({ status: false, msg: "Sessão expirada, faça login novamente." })
+if (!token || !nome || !cpf || !telefone) return res.status(400).json({ status: false, msg: "Campos obrigatórios não preenchidos." })
+var data = {
+    user_id: req.session.user.id,
+    sessao_id: req.session.id,
+    solicitacao_ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+    solicitacao_porta_logica: req.socket.remotePort,
+    userAgent: req.headers['user-agent']
+};
+const response = await createUseCase.validarX(data)
+if (response.status) return res.status(200).json({ status: true, msg: response.msg })
+res.status(400).json({ status: response.status, msg: response.msg })
+```
+
+- Não devolver `object` / domain no JSON a menos que o endpoint vizinho já devolva.
+- `revokeLogin` no use case → o controller vizinho de auth destrói a sessão; não invente isso em controller novo sem pedido.
+- Get por id: `id === undefined || id === null || id === '' || id === ' '` → 400.
+- Catch: `ErrorStackParser` + `logs.getInstance().error(dataLogs, 'Erro no XController - metodo')` + `{ status: false, msg: 'Erro interno no servidor' }`.
+
+---
+
+## 11) Domain
+
+```js
+const uuid = require('uuid');
+const dateNow = require('../../infrastructure/gateways/functions/data/getToday');
+
+class XDomain {
+    constructor(data) {
+        this.id = data.id ? data.id : uuid.v4()
+        this.campo = data.campo ? data.campo : null
+        this.data_atualizacao = data.data_atualizacao ? data.data_atualizacao : dateNow()
+        this.data_criacao = data.data_criacao ? data.data_criacao : dateNow()
+        this.deletado = data.deletado === true || data.deletado === false ? data.deletado : false
+    }
+    getX() { return { id: this.id, /* todos os campos */ } }
+    setX(data) {
+        this.campo = data.campo ? data.campo : this.campo
+        this.data_atualizacao = dateNow()
+        return this.getX()
+    }
+}
+module.exports = XDomain;
+```
+
+- Sem `class fields` modernos além do que o arquivo vizinho já tem.
+- Boolean `deletado` só aceita `true`/`false` explícito; senão `false`.
+- Domain de ledger tem `calcularHashAtual()` juntando campos com `'|'` e SHA-256. Não mude a ordem dos campos de um domain existente.
+
+---
+
+## 12) Fila — modelo obrigatório (`ProcessarBiometria`)
+
+Handler em `api/infrastructure/queue/handler/<Nome>/index.js`. Classe, **não** função solta. O wrapper em `handler/index.js` só carrega broker, instancia, chama `processar()`, republica se `reprocessar`.
+
+### 12.1 Forma da classe
+
+```js
+class ProcessarX {
+    #rabbitmq;
+    #knex;
+    #metaDados;
+    trx = null;
+    status = false;
+    reprocessar = false;
+    delayMs = rabbitMQ.defaultDelay;
+
+    constructor(rabbit, knex) {
+        this.#rabbitmq = rabbit;
+        this.#knex = knex;
+        this.#metaDados = normalizeMetaDados(rabbit.broker.meta_dados);
+        this.mountMetaDados();
+    }
+
+    mountMetaDados() {
+        if (!this.#metaDados) this.#metaDados = { tentativas: 0 };
+        if (this.#metaDados.tentativas === undefined) this.#metaDados.tentativas = 0;
+    }
+
+    async processar() { /* §5.3 + persistência */ }
+
+    #lerPayload() { /* parseBrokerMessageEnvelope; null se faltar campo */ }
+
+    async #finalizarComSucesso(msg) {
+        this.status = true;
+        this.reprocessar = false;
+        this.#metaDados.tentativas = 0;
+        logs.getInstance().info({ /* ids */ }, msg);
+        await this.#salvarBroker(statusBroker.processed);
+    }
+
+    async #finalizarSemRetentativa(msg) {
+        this.status = false;
+        this.reprocessar = false;
+        await this.#rollbackTrx();
+        logs.getInstance().error({ meta_dados: this.#metaDados }, `ProcessarX descartado: ${msg}`);
+        await this.#salvarBroker(statusBroker.failedNotRetry);
+    }
+
+    async #finalizarComRetentativa(msg) {
+        this.status = false;
+        this.#metaDados.tentativas += 1;
+        this.reprocessar = this.#metaDados.tentativas <= maxRetryReprocessBroker;
+        this.delayMs = rabbitMQ.defaultDelay * Math.pow(2, this.#metaDados.tentativas);
+        await this.#rollbackTrx();
+        logs.getInstance().error({ tentativas: this.#metaDados.tentativas }, `Falha no ProcessarX: ${msg}`);
+        await this.#salvarBroker(this.reprocessar ? statusBroker.pending : statusBroker.failedNotRetry);
+    }
+
+    async #rollbackTrx() {
+        if (!this.trx) return;
+        try { await this.trx.rollback(); }
+        catch (_) { /* transação já encerrada */ }
+        finally { this.trx = null; }
+    }
+
+    async #salvarBroker(status) {
+        try {
+            this.#rabbitmq.broker.status = status;
+            this.#rabbitmq.broker.delayMs = this.delayMs;
+            this.#rabbitmq.broker.meta_dados = JSON.stringify({ ...this.#metaDados });
+            this.#rabbitmq.broker.data_atualizacao = moment().format('YYYY-MM-DD HH:mm:ss');
+            await this.#rabbitmq.saveBroker(this.#knex);
+        } catch (error) {
+            logs.getInstance().error({ err: error }, 'Erro ao salvar o broker do ProcessarX');
+        }
+    }
+}
+
+class ErrorProcessarX extends Error {
+    constructor(message, retry) {
+        super(message);
+        this.name = 'ErrorProcessarX';
+        this.retry = retry !== false;
+    }
+}
+
+module.exports = ProcessarX;
+```
+
+### 12.2 Dentro de `processar()`
+
+1. `#lerPayload()` → sem campo obrigatório → `#finalizarSemRetentativa`.
+2. SELECT da linha. Não achou → sem retry.
+3. Conferir FKs do payload.
+4. Status já terminal → `#finalizarComSucesso` (idempotente).
+5. Status diferente do esperado → sem retry.
+6. Carregar dependências (early return em cada uma).
+7. Gateway externo (bucket, FaceMatch, SignServer). Falha transitória → `#finalizarComRetentativa`. Falha de dado → sem retry.
+8. `this.trx = await this.#knex.transaction()`.
+9. `forUpdate()`, revalidar, `old*`, mutar, `update`, ledger `Initialize` + `GravarAuditoriaModificacao`, histórico, `commit`, `this.trx = null`.
+10. Catch interno: `#rollbackTrx`; se `ErrorProcessarX` com `retry === false` → sem retry; senão retentativa.
+11. **Depois do commit:** side-effect (apagar WIP, etc.). Se o delete falhar, **loga** e **não** desfaz o processamento (`#finalizarComSucesso` mesmo assim).
+12. Catch externo: `console.log(err)`, log, rollback, retentativa.
+
+### 12.3 Publicar na fila (use case, pós-commit)
+
+```js
+const dispatcher = new MessageDispatcher(this.#rabbitMQ, []);
+dispatcher.addItem({
+    exchange: rabbitMQ.queues.<fila>.exchange,
+    routingKey: rabbitMQ.queues.<fila>.routingKey,
+    jsonMessage: { /* ids + paths + o mínimo para o worker revalidar */ },
+    delayMs: rabbitMQ.defaultDelay,
+});
+await trx.commit();
+await dispatcher.dispatch();
+```
+
+O worker **não confia** no json: ele relê o banco e reconferência.
+
+Registrar a fila em `queue/handler/index.js` e em `queue/workers/register/index.js` (`MountConsumer`) **só se o usuário pedir**.
+
+---
+
+## 13) Datas, crypto, bucket
+
+- `dateNow()` = agora no padrão do sistema.
+- Persistência: `moment(valor).format('YYYY-MM-DD HH:mm:ss')`.
+- Nome de objeto no vault: `moment().format('YYYYMMDDHHmmss')`.
+- Hash de arquivo/payload: `crypto.createHash('sha256').update(body).digest('hex')`.
+- Segredo/OTP/CPF: `SHA` de `infrastructure/gateways/crypt/sha` (`encrypt`, `hash`, `generateBlindIndex`).
+- WIP: `bucketGateway.Wip()` — upload temporário, `validarMagicPdf` / `validarImagem` / `obterArquivo`.
+- Vault: `bucketGateway.Vault()` — `salvarArquivo` + `selarDocumento`. Key = path **sem** repetir o nome do bucket.
+- URL assinada vira pública com `urlPublicaBucket(url)`.
+- Carimbo: `serverSignGateway.Carimbo().carimbarHash({ hashHex })`. Sem carimbo, sem commit da auditoria.
+
+---
+
+## 14) Anti-padrões (o agente costuma fazer — não faça)
+
+- Extrair `validateX()`, `buildPayload()`, `toDto()`, service layer, async-handler wrapper.
+- `async/await` com early-return transformado em `Result`/`Either`/exceptions genéricas para fluxo normal. Fluxo normal é `return { status: false, msg }`.
+- Um `if` só no lugar de `status` + `exit`.
+- Pular a segunda leitura com `forUpdate` no worker.
+- `GravarAuditoriaModificacao` sem `Initialize(old)` ou no 1º evento de solicitação.
+- Inventar helper de ledger novo se já existe `Ladger*` do agregado.
+- `cms_base64` no MySQL, envelope JSON estilo PAdES, ByteRange no metadata.
+- Enfileirar / mandar e-mail / `SessionSave` **dentro** da trx sem rollback se falhar (session save em `solicitacaoPerfilBiometria` é exceção já existente: se falhar, rollback). Em código novo: side-effect **após** commit, salvo quando o vizinho já salva sessão antes do commit.
+- `console.log` de debug permanente, `return dev`, `rollback` de teste.
+- Refatorar 200 linhas para caber um gancho de 15.
+- Corrigir typo `trnasformcao`, pasta `Ladger`, ou “melhorar” nomes de certs.
+- TypeScript, ESM, `async` repository “limpo”, class fields com tipos.
+
+---
+
+## 15) Definition of Done (o agente marca mentalmente antes de entregar)
+
+- [ ] Arquivo alvo / vizinho copiado na forma (CommonJS, class, singleton, catch).
+- [ ] Cada `check*` testa `status` e `exit` em linhas separadas.
+- [ ] Conferência redundante presente (2FA / ids / status / lock / gateway).
+- [ ] `old*` clonado e datas formatadas **antes** de mutar.
+- [ ] Trx: persist → ledger → histórico → commit → fila/e-mail.
+- [ ] Return após `transaction()` faz rollback.
+- [ ] Ledger: create sem `Initialize`; update com `Initialize(old)` + `sequencia` number + `meta_data` objeto.
+- [ ] `ErrorLedger*` tratado; falha de auditoria não commita.
+- [ ] Histórico da entidade na trx (`dado_antigo` / `dado_atual` / `historico.trnasformcao.*`).
+- [ ] Use case devolve `object` (e `oldObject` no update) se o controller gravar histórico.
+- [ ] Worker segue `ProcessarBiometria` (payload, duas passagens, finalizar*, broker, backoff).
+- [ ] Mensagem ao cliente em PT, genérica no inesperado.
+- [ ] Nenhuma lib/helper/migration inventada.
+
+---
+
+## 16) Mini contrato para o agente (cole no topo da tarefa)
+
+```
+ESTILO: codeStyle/PROMPT-ESTILO-CODIGO.md
+CANÔNICOS: createDocumentosUseCase / createPerfilUsuarioUseCase.validarPerfilUsuario / ProcessarBiometria
+PROIBIDO: scaffold CRUD; inventar helper; pular status+exit; ledger sem Initialize na modificação; fila antes do commit
+```

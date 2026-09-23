@@ -1,0 +1,805 @@
+<!doctype html>
+<html>
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+      :root {
+        --bg: #f8f9fa;
+        --panel: #ffffff;
+        --ink: #202124;
+        --muted: #5f6368;
+        --line: #dadce0;
+        --accent: #1a73e8;
+        --ok: #188038;
+        --err: #c5221f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        grid-template-rows: 64px 1fr;
+        height: 100%;
+      }
+      header {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 0 16px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      header .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 2px;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      button {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+        border-radius: 6px;
+        padding: 8px 14px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #f8f9fa;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button.danger {
+        background: var(--ok);
+        border-color: var(--ok);
+        color: #fff;
+      }
+      aside {
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        overflow: auto;
+        padding: 12px;
+      }
+      aside h2 {
+        margin: 4px 0 12px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+      .recipient {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        width: 100%;
+        text-align: left;
+        padding: 10px;
+        margin-bottom: 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+      .recipient.active {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+      .swatch {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        margin-top: 3px;
+        flex: 0 0 auto;
+      }
+      .recipient strong {
+        display: block;
+        font-size: 13px;
+      }
+      .recipient .meta {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .badge {
+        margin-top: 6px;
+        display: inline-block;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #e8f0fe;
+        color: #1967d2;
+      }
+      .badge.missing {
+        background: #fce8e6;
+        color: var(--err);
+      }
+      main {
+        overflow: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+      .status {
+        font-size: 13px;
+        color: var(--muted);
+        min-height: 18px;
+        text-align: center;
+      }
+      .status.error {
+        color: var(--err);
+      }
+      .status.ok {
+        color: var(--ok);
+      }
+      .document {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        width: 100%;
+        max-width: 920px;
+        padding-bottom: 48px;
+      }
+      .page-block {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .page-caption {
+        font-size: 12px;
+        color: var(--muted);
+        align-self: flex-start;
+      }
+      .stage-wrap {
+        position: relative;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(60, 64, 67, 0.2);
+        line-height: 0;
+        /* Largura/altura definidas via JS = pixels do viewport PDF (sem CSS scale). */
+      }
+      .stage-wrap canvas {
+        display: block;
+        /* Não usar max-width: evita deslocamento mouse vs. área. */
+        width: auto;
+        height: auto;
+        max-width: none;
+      }
+      .overlay {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+        touch-action: none;
+      }
+      .box {
+        position: absolute;
+        border: 2px solid;
+        border-radius: 2px;
+        pointer-events: none;
+      }
+      .box.preview {
+        border-style: dashed;
+      }
+      .box .label {
+        position: absolute;
+        left: -2px;
+        top: -20px;
+        font-size: 11px;
+        line-height: 16px;
+        padding: 0 6px;
+        border-radius: 3px 3px 0 0;
+        color: #fff;
+        white-space: nowrap;
+      }
+      .done {
+        display: none;
+        max-width: 420px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 24px;
+        text-align: left;
+      }
+      .done h2 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      .done p {
+        margin: 0 0 16px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        background: #202124;
+        color: #fff;
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        z-index: 20;
+      }
+      .modal-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(32, 33, 36, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 30;
+        padding: 16px;
+      }
+      .modal-mask.open {
+        display: flex;
+      }
+      .modal {
+        background: #fff;
+        border-radius: 8px;
+        padding: 24px;
+        max-width: 400px;
+        width: 100%;
+        box-shadow: 0 8px 24px rgba(60, 64, 67, 0.2);
+      }
+      .modal h2 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      .modal p {
+        margin: 0 0 16px;
+        color: var(--muted);
+        line-height: 1.45;
+        font-size: 13px;
+      }
+      .modal button {
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header>
+        <div>
+          <h1 id="title">Posicionar e enviar assinaturas</h1>
+          <div class="hint">
+            Exclusivo do solicitante · selecione o destinatário e clique no PDF
+            — o quadro de assinatura tem tamanho fixo
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" id="btnClear" disabled>Limpar área</button>
+          <button type="button" id="btnSave" disabled>Salvar posições</button>
+          <button type="button" class="danger" id="btnSend" disabled>
+            Enviar pedido
+          </button>
+        </div>
+      </header>
+      <aside>
+        <h2>Destinatários</h2>
+        <div id="list"></div>
+      </aside>
+      <main>
+        <div class="status" id="status">Carregando PDF…</div>
+        <div class="document" id="document" hidden></div>
+        <div class="done" id="done">
+          <h2 id="doneTitle">Pedido enviado</h2>
+          <p>Pode fechar esta janela.</p>
+          <button type="button" id="btnFechar">Fechar</button>
+        </div>
+      </main>
+    </div>
+    <div class="toast" id="toast" hidden>Pedido enviado</div>
+    <div class="modal-mask" id="modalMask">
+      <div class="modal">
+        <h2>Não foi possível enviar</h2>
+        <p id="modalMsg"></p>
+        <button type="button" class="danger" id="btnEncerrar">Encerrar</button>
+      </div>
+    </div>
+
+    <script>
+      var SESSION_TOKEN = <?!= JSON.stringify(token) ?>;
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      /** Quadro de assinatura fixo (pt) — mesmo contrato do use case da API (#validarPayload). */
+      var QUADRO_LARGURA_PT = 230;
+      var QUADRO_ALTURA_PT = 115;
+
+      var state = {
+        recipients: [],
+        selectedId: null,
+        pdfDoc: null,
+        pageCount: 0,
+        /** @type {Object.<number, {wrap:HTMLElement, canvas:HTMLCanvasElement, overlay:HTMLElement, width:number, height:number}>} */
+        pages: {},
+        closed: false
+      };
+
+      var els = {
+        title: document.getElementById('title'),
+        list: document.getElementById('list'),
+        status: document.getElementById('status'),
+        document: document.getElementById('document'),
+        btnSave: document.getElementById('btnSave'),
+        btnClear: document.getElementById('btnClear'),
+        btnSend: document.getElementById('btnSend'),
+        done: document.getElementById('done'),
+        doneTitle: document.getElementById('doneTitle'),
+        toast: document.getElementById('toast'),
+        modalMask: document.getElementById('modalMask'),
+        modalMsg: document.getElementById('modalMsg'),
+        btnFechar: document.getElementById('btnFechar'),
+        btnEncerrar: document.getElementById('btnEncerrar')
+      };
+
+      function setStatus(text, kind) {
+        els.status.textContent = text || '';
+        els.status.className = 'status' + (kind ? ' ' + kind : '');
+      }
+
+      function selectedRecipient() {
+        return state.recipients.find(function (r) { return r.id === state.selectedId; });
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function round6(n) {
+        return Math.round(n * 1e6) / 1e6;
+      }
+
+      function clamp01(n) {
+        return Math.min(1, Math.max(0, n));
+      }
+
+      function hexToRgba(hex, alpha) {
+        var h = String(hex || '#1a73e8').replace('#', '');
+        if (h.length === 3) {
+          h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+        }
+        var r = parseInt(h.substring(0, 2), 16);
+        var g = parseInt(h.substring(2, 4), 16);
+        var b = parseInt(h.substring(4, 6), 16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+      }
+
+      /**
+       * Converte evento de ponteiro em coordenadas normalizadas (0–1)
+       * relativas à página PDF, origem canto superior esquerdo.
+       * Usa getBoundingClientRect do overlay (tamanho visual = viewport PDF).
+       */
+      function pointerToNorm(evt, overlay) {
+        var rect = overlay.getBoundingClientRect();
+        if (!rect.width || !rect.height) {
+          return { x: 0, y: 0, page: Number(overlay.dataset.page) };
+        }
+        return {
+          page: Number(overlay.dataset.page),
+          x: clamp01((evt.clientX - rect.left) / rect.width),
+          y: clamp01((evt.clientY - rect.top) / rect.height)
+        };
+      }
+
+      /** Duas áreas se sobrepõem se os intervalos de x e de y se cruzam ao mesmo tempo. */
+      function overlapsArea(a, b) {
+        return (
+          a.x < b.x + b.width &&
+          a.x + a.width > b.x &&
+          a.y < b.y + b.height &&
+          a.y + a.height > b.y
+        );
+      }
+
+      function renderList() {
+        els.list.innerHTML = '';
+        state.recipients.forEach(function (r) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'recipient' + (r.id === state.selectedId ? ' active' : '');
+          btn.innerHTML =
+            '<span class="swatch" style="background:' + r.color + '"></span>' +
+            '<span>' +
+              '<strong>' + escapeHtml(r.name) + '</strong>' +
+              '<span class="meta">' + escapeHtml(r.email) + '</span>' +
+              '<span class="badge ' + (r.signatureArea ? '' : 'missing') + '">' +
+                (r.signatureArea ? 'Página ' + r.signatureArea.page : 'Sem área') +
+              '</span>' +
+            '</span>';
+          btn.addEventListener('click', function () {
+            if (state.closed) return;
+            state.selectedId = r.id;
+            renderList();
+            renderAllBoxes();
+            els.btnClear.disabled = !r.signatureArea;
+            if (r.signatureArea && r.signatureArea.page) {
+              scrollToPage(r.signatureArea.page);
+            }
+          });
+          els.list.appendChild(btn);
+        });
+      }
+
+      function createBoxElement(area, color, name, isPreview) {
+        var pageInfo = state.pages[area.page];
+        if (!pageInfo) return null;
+
+        var displayW = pageInfo.overlay.clientWidth || pageInfo.width;
+        var displayH = pageInfo.overlay.clientHeight || pageInfo.height;
+
+        var box = document.createElement('div');
+        box.className = 'box' + (isPreview ? ' preview' : '');
+        box.style.borderColor = color;
+        box.style.left = area.x * displayW + 'px';
+        box.style.top = area.y * displayH + 'px';
+        box.style.width = Math.max(area.width * displayW, 2) + 'px';
+        box.style.height = Math.max(area.height * displayH, 2) + 'px';
+        box.style.background = hexToRgba(color, isPreview ? 0.12 : 0.18);
+
+        if (name && !isPreview) {
+          var label = document.createElement('div');
+          label.className = 'label';
+          label.style.background = color;
+          label.textContent = name;
+          box.appendChild(label);
+        }
+        return box;
+      }
+
+      function clearOverlays() {
+        Object.keys(state.pages).forEach(function (pageNum) {
+          state.pages[pageNum].overlay.innerHTML = '';
+        });
+      }
+
+      function renderAllBoxes() {
+        clearOverlays();
+        state.recipients.forEach(function (r) {
+          if (!r.signatureArea) return;
+          var box = createBoxElement(r.signatureArea, r.color, r.name, false);
+          var pageInfo = state.pages[r.signatureArea.page];
+          if (box && pageInfo) {
+            pageInfo.overlay.appendChild(box);
+          }
+        });
+      }
+
+      function scrollToPage(pageNum) {
+        var pageInfo = state.pages[pageNum];
+        if (pageInfo && pageInfo.wrap) {
+          pageInfo.wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+
+      /**
+       * Escala para caber na coluna (máx. 880px), sem CSS scale posterior.
+       * canvas.width/height e style = mesmos pixels do viewport PDF.js.
+       */
+      function computeFitScale(page) {
+        var base = page.getViewport({ scale: 1 });
+        var maxWidth = Math.min(880, Math.max(320, els.document.clientWidth || 880));
+        return maxWidth / base.width;
+      }
+
+      function renderAllPages() {
+        els.document.innerHTML = '';
+        state.pages = {};
+
+        var chain = Promise.resolve();
+        for (var n = 1; n <= state.pageCount; n++) {
+          (function (pageNum) {
+            chain = chain.then(function () {
+              return state.pdfDoc.getPage(pageNum).then(function (page) {
+                var baseViewport = page.getViewport({ scale: 1 });
+                var scale = computeFitScale(page);
+                var viewport = page.getViewport({ scale: scale });
+
+                var block = document.createElement('div');
+                block.className = 'page-block';
+
+                var caption = document.createElement('div');
+                caption.className = 'page-caption';
+                caption.textContent = 'Página ' + pageNum + ' de ' + state.pageCount;
+                block.appendChild(caption);
+
+                var wrap = document.createElement('div');
+                wrap.className = 'stage-wrap';
+                wrap.style.width = viewport.width + 'px';
+                wrap.style.height = viewport.height + 'px';
+
+                var canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                canvas.style.width = viewport.width + 'px';
+                canvas.style.height = viewport.height + 'px';
+
+                var overlay = document.createElement('div');
+                overlay.className = 'overlay';
+                overlay.dataset.page = String(pageNum);
+
+                wrap.appendChild(canvas);
+                wrap.appendChild(overlay);
+                block.appendChild(wrap);
+                els.document.appendChild(block);
+
+                state.pages[pageNum] = {
+                  wrap: wrap,
+                  canvas: canvas,
+                  overlay: overlay,
+                  width: viewport.width,
+                  height: viewport.height,
+                  /** Media box em pontos PDF (72 dpi) — para o backend. */
+                  pageWidthPt: baseViewport.width,
+                  pageHeightPt: baseViewport.height
+                };
+
+                bindOverlay(overlay);
+
+                var ctx = canvas.getContext('2d');
+                return page.render({ canvasContext: ctx, viewport: viewport }).promise;
+              });
+            });
+          })(n);
+        }
+
+        return chain.then(function () {
+          renderAllBoxes();
+        });
+      }
+
+      function bindOverlay(overlay) {
+        overlay.addEventListener('click', onOverlayClick);
+        overlay.addEventListener('touchend', onOverlayTouchEnd, { passive: false });
+      }
+
+      function onOverlayClick(evt) {
+        if (state.closed) return;
+        placeFixedBox(evt, evt.currentTarget);
+      }
+
+      function onOverlayTouchEnd(evt) {
+        if (state.closed || !evt.changedTouches || !evt.changedTouches[0]) return;
+        var touch = evt.changedTouches[0];
+        placeFixedBox({ clientX: touch.clientX, clientY: touch.clientY }, evt.currentTarget);
+        evt.preventDefault();
+      }
+
+      /**
+       * Clique/toque = quadro de assinatura fixo (230×115pt, convertido pra
+       * fração da página), centralizado no ponto e sem sair da página —
+       * mesmo comportamento do site (frontend/Components/Pdf/Demarcacao).
+       */
+      function placeFixedBox(point, overlay) {
+        var recipient = selectedRecipient();
+        if (!recipient) {
+          setStatus('Selecione um destinatário na lista à esquerda.', 'error');
+          return;
+        }
+
+        var norm = pointerToNorm(point, overlay);
+        var pageInfo = state.pages[norm.page];
+        if (!pageInfo) return;
+
+        var boxWidth = Math.min(QUADRO_LARGURA_PT / (pageInfo.pageWidthPt || 612), 1);
+        var boxHeight = Math.min(QUADRO_ALTURA_PT / (pageInfo.pageHeightPt || 792), 1);
+        var x = clamp01(Math.min(Math.max(norm.x - boxWidth / 2, 0), 1 - boxWidth));
+        var y = clamp01(Math.min(Math.max(norm.y - boxHeight / 2, 0), 1 - boxHeight));
+        var area = { page: norm.page, x: x, y: y, width: boxWidth, height: boxHeight };
+
+        // Contrato exige exatamente 1 demarcação por destinatário — clicar de
+        // novo move o quadro dele em vez de acumular várias áreas na página.
+        var sobrepoe = state.recipients.some(function (r) {
+          return (
+            r.id !== recipient.id &&
+            r.signatureArea &&
+            r.signatureArea.page === area.page &&
+            overlapsArea(r.signatureArea, area)
+          );
+        });
+        if (sobrepoe) {
+          setStatus('Essa área sobrepõe a demarcação de outro destinatário nesta página.', 'error');
+          return;
+        }
+
+        recipient.signatureArea = {
+          page: area.page,
+          x: round6(area.x),
+          y: round6(area.y),
+          width: round6(area.width),
+          height: round6(area.height),
+          coordinateSystem: 'normalized-top-left',
+          pageWidthPt: round6(pageInfo.pageWidthPt),
+          pageHeightPt: round6(pageInfo.pageHeightPt)
+        };
+
+        els.btnClear.disabled = false;
+        els.btnSave.disabled = false;
+        els.btnSend.disabled = false;
+        renderList();
+        renderAllBoxes();
+        setStatus(
+          'Quadro de assinatura posicionado para ' + recipient.name + ' · pág. ' + area.page + '.',
+          'ok'
+        );
+      }
+
+      function currentPlacements() {
+        return state.recipients.map(function (r) {
+          return { recipientId: r.id, signatureArea: r.signatureArea };
+        });
+      }
+
+      function fecharHost() {
+        try {
+          if (google && google.script && google.script.host && typeof google.script.host.close === 'function') {
+            google.script.host.close();
+            return true;
+          }
+        } catch (err) {}
+        return false;
+      }
+
+      function mostrarPodeFechar(titulo) {
+        els.modalMask.className = 'modal-mask';
+        els.document.hidden = true;
+        els.done.style.display = 'block';
+        els.doneTitle.textContent = titulo || 'Pedido enviado';
+        setStatus(titulo || 'Pedido enviado.', 'ok');
+      }
+
+      function lockUiAfterSend(result) {
+        state.closed = true;
+        els.btnClear.disabled = true;
+        els.btnSave.disabled = true;
+        els.btnSend.disabled = true;
+        els.toast.hidden = false;
+        setStatus((result && result.message) || 'Pedido enviado.', 'ok');
+        setTimeout(function () {
+          if (!fecharHost()) mostrarPodeFechar('Pedido enviado');
+        }, 1200);
+      }
+
+      function mostrarFalhaEnvio(msg) {
+        state.closed = true;
+        els.btnClear.disabled = true;
+        els.btnSave.disabled = true;
+        els.btnSend.disabled = true;
+        els.modalMsg.textContent = msg || 'Não foi possível enviar o pedido.';
+        els.modalMask.className = 'modal-mask open';
+      }
+
+      els.btnClear.addEventListener('click', function () {
+        if (state.closed) return;
+        var recipient = selectedRecipient();
+        if (!recipient) return;
+        recipient.signatureArea = null;
+        els.btnClear.disabled = true;
+        els.btnSave.disabled = false;
+        els.btnSend.disabled = false;
+        renderList();
+        renderAllBoxes();
+        setStatus('Área removida de ' + recipient.name + '.');
+      });
+
+      els.btnSave.addEventListener('click', function () {
+        if (state.closed) return;
+        els.btnSave.disabled = true;
+        setStatus('Salvando posições…');
+        google.script.run
+          .withSuccessHandler(function (result) {
+            setStatus(
+              'Posições salvas (' + result.placedCount + '/' + result.total + ').',
+              'ok'
+            );
+            els.btnSave.disabled = false;
+          })
+          .withFailureHandler(function (err) {
+            setStatus(err && err.message ? err.message : String(err), 'error');
+            els.btnSave.disabled = false;
+          })
+          .savePlacementEditorData(SESSION_TOKEN, currentPlacements());
+      });
+
+      els.btnSend.addEventListener('click', function () {
+        if (state.closed) return;
+        var missing = state.recipients.filter(function (r) { return !r.signatureArea; });
+        if (missing.length > 0) {
+          setStatus(
+            'Falta delimitar a assinatura de: ' +
+              missing.map(function (r) { return r.name; }).join(', '),
+            'error'
+          );
+          return;
+        }
+
+        els.btnSend.disabled = true;
+        els.btnSave.disabled = true;
+        setStatus('Criando e enviando pedido…');
+
+        google.script.run
+          .withSuccessHandler(function (result) {
+            lockUiAfterSend(result);
+          })
+          .withFailureHandler(function (err) {
+            mostrarFalhaEnvio(err && err.message ? err.message : String(err));
+          })
+          .submitPlacementAndSend(SESSION_TOKEN, currentPlacements());
+      });
+
+      function aoEncerrar() {
+        if (!fecharHost()) mostrarPodeFechar(els.modalMask.className.indexOf('open') >= 0 ? 'Não foi possível enviar' : 'Pedido enviado');
+      }
+      els.btnFechar.addEventListener('click', aoEncerrar);
+      els.btnEncerrar.addEventListener('click', aoEncerrar);
+
+      google.script.run
+        .withSuccessHandler(function (data) {
+          els.title.textContent = 'Posicionar e enviar — ' + data.fileName;
+          state.recipients = data.recipients || [];
+          state.selectedId = state.recipients[0] ? state.recipients[0].id : null;
+          renderList();
+
+          var raw = atob(data.pdfBase64);
+          var bytes = new Uint8Array(raw.length);
+          for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+
+          pdfjsLib.getDocument({ data: bytes }).promise.then(function (pdf) {
+            state.pdfDoc = pdf;
+            state.pageCount = pdf.numPages;
+            els.document.hidden = false;
+            els.btnSave.disabled = false;
+            els.btnSend.disabled = false;
+            setStatus(
+              'Documento completo abaixo. Selecione o destinatário e arraste o retângulo no local exato da assinatura.'
+            );
+            return renderAllPages();
+          }).catch(function (err) {
+            setStatus('Falha ao renderizar o PDF: ' + err.message, 'error');
+          });
+        })
+        .withFailureHandler(function (err) {
+          setStatus(err && err.message ? err.message : String(err), 'error');
+        })
+        .getPlacementEditorData(SESSION_TOKEN);
+    </script>
+  </body>
+</html>

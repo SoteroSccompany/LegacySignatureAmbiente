@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Assinar documento — SignatureExperts</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="assinatura.css">
+    <script src="pdf.min.js"></script>
+</head>
+
+<body class="assinatura-page">
+    <header class="topbar">
+        <div class="topbar__brand">
+            <span class="topbar__logo">SE</span>
+            <div class="topbar__titles">
+                <h1>Assinatura eletrônica</h1>
+                <p id="docInfo">Informe o documento e autentique-se para assinar</p>
+            </div>
+        </div>
+        <div class="topbar__actions">
+            <a class="btn btn--ghost" href="index.html">Demarcador</a>
+        </div>
+    </header>
+
+    <main class="assinatura-layout">
+        <section class="assinatura-panel" id="loginPanel">
+            <h2 class="panel__title">Acesso do signatário</h2>
+            <p class="panel__hint" id="loginHint">Passo 1: e-mail e senha geram o desafio. Passo 2: código 2FA libera o documento.</p>
+
+            <form class="form" id="loginForm" autocomplete="on">
+                <div id="stepCredenciais">
+                    <div class="field">
+                        <label for="documentoId">ID do documento</label>
+                        <input type="text" id="documentoId" required placeholder="uuid do documento">
+                    </div>
+                    <div class="field">
+                        <label for="email">E-mail</label>
+                        <input type="email" id="email" required placeholder="voce@empresa.com">
+                    </div>
+                    <div class="field">
+                        <label for="senha">Senha</label>
+                        <input type="password" id="senha" required autocomplete="current-password">
+                    </div>
+                </div>
+
+                <div id="step2fa" hidden>
+                    <div class="field">
+                        <label for="token2fa">Código 2FA</label>
+                        <input type="text" id="token2fa" inputmode="numeric" maxlength="8" placeholder="000000" autocomplete="one-time-code">
+                    </div>
+                </div>
+
+                <details class="config-details">
+                    <summary>Configuração da API</summary>
+                    <div class="field">
+                        <label for="apiBase">Base URL (proxy)</label>
+                        <input type="url" id="apiBase" placeholder="http://localhost:7749/signature">
+                    </div>
+                    <div class="field">
+                        <label for="proxyKey">Proxy authorization (Bearer token)</label>
+                        <input type="password" id="proxyKey" placeholder="token JWT do KEY_PROXY">
+                    </div>
+                    <div class="field">
+                        <label for="bucketHost">Host público do bucket (evita HSTS/HTTPS)</label>
+                        <input type="text" id="bucketHost" placeholder="127.0.0.1" value="127.0.0.1">
+                    </div>
+                </details>
+
+                <button class="btn btn--primary btn--block" type="submit" id="btnLogin">Validar credenciais</button>
+                <button class="btn btn--ghost btn--block" type="button" id="btnVoltarLogin" hidden>Voltar</button>
+            </form>
+            <p class="form-msg" id="loginMsg" hidden></p>
+        </section>
+
+        <section class="assinatura-workspace" id="workspace" hidden>
+            <aside class="sidebar assinatura-sidebar">
+                <section class="panel">
+                    <h2 class="panel__title">Documento</h2>
+                    <dl class="meta-list" id="docMeta"></dl>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel__title">Estampa visual</h2>
+                    <div class="modo-group" role="radiogroup" aria-label="Modo de estampa">
+                        <label class="modo-option">
+                            <input type="radio" name="modo" value="DADOS" checked>
+                            <span>Dados (nome, CPF, data)</span>
+                        </label>
+                        <label class="modo-option">
+                            <input type="radio" name="modo" value="DESENHO">
+                            <span>Desenho (PNG)</span>
+                        </label>
+                    </div>
+
+                    <div id="desenhoBox" class="desenho-box" hidden>
+                        <canvas id="padCanvas" width="420" height="160"></canvas>
+                        <div class="field-row">
+                            <button type="button" class="btn btn--ghost" id="btnLimparPad">Limpar</button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn--primary btn--block" type="button" id="btnAssinar">Assinar documento</button>
+                    <button class="btn btn--ghost btn--block" type="button" id="btnDownload" hidden>Baixar PDF assinado</button>
+                    <p class="form-msg" id="signMsg" hidden></p>
+                </section>
+            </aside>
+
+            <div class="viewer" id="viewer">
+                <div class="viewer__empty" id="viewerEmpty">Carregando PDF…</div>
+            </div>
+        </section>
+    </main>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="assinatura.js"></script>
+</body>
+
+</html>

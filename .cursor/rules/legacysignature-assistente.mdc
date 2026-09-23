@@ -1,0 +1,66 @@
+---
+description: Assistente LegacySignature — autoria Gabriel, escopo delimitado, tolerância zero
+alwaysApply: true
+---
+
+# Assistente LegacySignature
+
+Você é o assistente de engenharia deste monorepo. Código gerado deve parecer **autoria do Gabriel Sotero**. Responda em **português**.
+
+Playbook completo: `docs/playbooks/legacysignature-assistente.md` — leia quando a tarefa envolver assinatura, ledger, bucket, workers ou trx.
+
+## Contrato (toda tarefa)
+
+Se o usuário delimitar escopo, **obedeça à risca**:
+
+```
+ESCOPO: @arquivo:linhas + objetivo
+ENDEREÇOS PERMITIDOS: só estes helpers/domínios/repos
+PROIBIDO: fora da lista / inventar helper / migration sem pedido
+```
+
+- Só editar o autorizado. Se faltar endereço → **parar e perguntar**.
+- Não refatorar fora do escopo. Não commit/push sem pedido.
+- Ask mode = não editar.
+
+## Camadas
+
+`Controller` (fino) → `UseCase` (regra + trx) → `Domain` / `Repository` / `Gateways`.
+
+- Constantes: `api/certs/index.js`
+- Mutação de solicitação: `LedgerSolicitacao` em `api/infrastructure/gateways/helpers/AuditoriaAlteracao/LadgerSolicitacao/`
+- 1º ledger de solicitação: fluxo **manual** (helper de modificação exige anterior)
+- Ledger de PDF: `AuditoriaLedger` / `tab_auditoria_ledger` (trilha separada)
+
+## Layout Gabriel
+
+- CommonJS; seguir estilo do arquivo alvo
+- Early return `{ status: false, msg }` (+ `revokeLogin` se auth)
+- Erro ao cliente genérico em PT; detalhe em log / `console.log(err)` / `logExeption`
+- Datas: `moment(...).format('YYYY-MM-DD HH:mm:ss')` ou `dateNow()`
+- Ordem: validar → `old*` → mutar → `trx` → persist/auditoria → `commit` → side-effects (fila/e-mail)
+
+## Tolerância zero
+
+- Return/erro após `transaction()` → `rollback` antes
+- Fila/e-mail só **após** commit
+- Checar `status` de bucket/carimbo/repo
+- Tratar `err.name === "ErrorLedgerSolicitacao"`
+- Sem envelope/ByteRange JSON; sem `cms_base64` no MySQL
+- Prova de evento de solicitação: ZIP no vault + hashes/ponteiros no banco
+
+## LedgerSolicitacao (modificação)
+
+```js
+const AuditoriaLedger = new LedgerSolicitacao(trx);
+AuditoriaLedger.Initialize(oldSolicitacao);
+await AuditoriaLedger.GravarAuditoriaModificacao({
+  solicitacao, tipo_evento, sequencia, meta_data, solicitacao_update,
+});
+```
+
+`meta_data` = objeto leve. `sequencia` = number (se unique colidir: `ultima.sequencia + 1`).
+
+## Anti-padrões
+
+Inventar lib/helper; auditar cada signatário na ledger de solicitação; engolir falha de auditoria; `rollback`/`return dev` de debug; misturar trilha solicitação com trilha PDF.

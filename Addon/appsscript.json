@@ -1,0 +1,48 @@
+{
+  "timeZone": "America/Sao_Paulo",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive.addons.metadata.readonly",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ],
+  "urlFetchWhitelist": [
+    "https://vl2pn4hz-7749.brs.devtunnels.ms/addon/",
+    "https://www.googleapis.com/",
+    "https://vl2pn4hz-7749.brs.devtunnels.ms/"
+  ],
+  "addOns": {
+    "common": {
+      "name": "Assinatura Digital",
+      "logoUrl": "https://www.gstatic.com/images/icons/material/system/1x/description_black_24dp.png",
+      "layoutProperties": {
+        "primaryColor": "#1a73e8",
+        "secondaryColor": "#4285f4"
+      },
+      "homepageTrigger": {
+        "runFunction": "onHomepage"
+      },
+      "openLinkUrlPrefixes": [
+        "https://script.google.com/",
+        "https://drive.google.com/",
+        "https://vl2pn4hz-7749.brs.devtunnels.ms/",
+        "http://localhost:3395/"
+      ]
+    },
+    "drive": {
+      "homepageTrigger": {
+        "runFunction": "onHomepage"
+      },
+      "onItemsSelectedTrigger": {
+        "runFunction": "onDriveItemsSelected"
+      }
+    }
+  },
+  "webapp": {
+    "executeAs": "USER_ACCESSING",
+    "access": "DOMAIN"
+  }
+}

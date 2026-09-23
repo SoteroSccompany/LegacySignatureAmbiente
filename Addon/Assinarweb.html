@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_self" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+      :root {
+        --bg: #f8f9fa;
+        --panel: #ffffff;
+        --ink: #202124;
+        --muted: #5f6368;
+        --line: #dadce0;
+        --accent: #1a73e8;
+        --ok: #188038;
+        --err: #c5221f;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      header.top {
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+        padding: 12px 20px;
+      }
+      header.top h1 { margin: 0; font-size: 16px; font-weight: 600; }
+      header.top .hint { color: var(--muted); font-size: 12px; margin-top: 2px; }
+      main {
+        max-width: 560px;
+        margin: 24px auto;
+        padding: 0 16px 48px;
+      }
+      main.wide { max-width: 980px; }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 24px;
+      }
+      .card h2 { margin: 0 0 6px; font-size: 18px; }
+      .card p.sub { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+      label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+      input[type="text"], input[type="email"], input[type="password"] {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+      input.otp { text-align: center; font-size: 22px; letter-spacing: 0.4em; }
+      button.primary {
+        width: 100%;
+        margin-top: 16px;
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        border-radius: 6px;
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.primary:disabled { opacity: 0.5; cursor: default; }
+      button.link {
+        background: none;
+        border: none;
+        color: var(--accent);
+        font-size: 13px;
+        cursor: pointer;
+        padding: 8px 0 0;
+        display: inline-block;
+      }
+      .msg { margin-top: 12px; font-size: 13px; min-height: 18px; }
+      .msg.error { color: var(--err); }
+      .msg.ok { color: var(--ok); }
+      .spinner {
+        width: 36px;
+        height: 36px;
+        margin: 24px auto;
+        border: 3px solid rgba(26, 115, 232, 0.25);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .termo-box {
+        max-height: 260px;
+        overflow: auto;
+        background: var(--bg);
+        border-radius: 6px;
+        padding: 14px;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      .lista-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .lista-item:hover { border-color: var(--accent); }
+      .lista-item .meta { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; }
+      .qr { text-align: center; margin: 12px 0; }
+      .qr img { width: 200px; height: 200px; }
+      .pdf-col {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        width: 100%;
+        max-height: 65vh;
+        overflow: auto;
+        margin: 16px 0;
+      }
+      .pdf-col canvas { display: block; width: 100%; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(60,64,67,0.2); }
+      .pdf-col iframe, .pdf-frame {
+        display: block;
+        width: 100%;
+        min-height: 60vh;
+        border: 0;
+        background: #fff;
+      }
+      .aviso {
+        background: var(--bg);
+        border-radius: 6px;
+        padding: 12px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .footer-link {
+        margin-top: 20px;
+        text-align: center;
+        font-size: 12px;
+      }
+      .footer-link a, .footer-link .link {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 12px;
+      }
+      .footer-link a:hover, .footer-link .link:hover { text-decoration: underline; }
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        background: #202124;
+        color: #fff;
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        z-index: 20;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <h1>Assinatura</h1>
+    </header>
+    <main id="main"><div class="card"><div class="spinner"></div></div></main>
+    <div class="toast" id="toast" hidden>Assinatura concluída</div>
+
+    <script>
+      var SERVICE_BASE = <?!= JSON.stringify(serviceBaseUrl) ?>;
+      var SITE_URL = <?!= JSON.stringify(siteUrl) ?>;
+      var CONVITE = <?!= JSON.stringify(convite) ?>;
+      var INSTALACAO_KEY = <?!= JSON.stringify(instalacaoKey) ?>;
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      var LSAK_KEY = 'LSAK_ASSINATURA';
+      var MAX_POLL_FOTO = 40;
+
+      var state = {
+        // Conta Google com lsic_ vinculada: usa direto, sem colar a lsak_.
+        instalacaoKey: INSTALACAO_KEY || null,
+        chave: sessionStorage.getItem(LSAK_KEY) || null,
+        documentoId: CONVITE.documento_id || null,
+        tituloDocumento: null,
+        uploadInfo: null,       // { url, identificacao_id } da selfie da cerimônia
+        termoDocumentoId: null,
+        pollTimer: null,
+        // Handoff progresso <-> sessão só uma vez por tentativa (mesma trava do site).
+        autoHandoffFeito: false
+      };
+
+      var main = document.getElementById('main');
+
+      // ----------------------------------------------------------------
+      // Infra: fetch no addon-service com a lsak_ do signatário + telas base
+      // ----------------------------------------------------------------
+
+      function api(metodo, path, body) {
+        var headers = { 'Content-Type': 'application/json' };
+        if (state.instalacaoKey) headers['x-instalacao-key'] = state.instalacaoKey;
+        else if (state.chave) headers['x-integracao-key'] = state.chave;
+        return fetch(SERVICE_BASE + path, {
+          method: metodo,
+          headers: headers,
+          body: body ? JSON.stringify(body) : undefined
+        }).then(function (resp) {
+          return resp
+            .json()
+            .catch(function () { return {}; })
+            .then(function (json) {
+              return { ok: resp.ok, http: resp.status, body: json };
+            });
+        }).catch(function () {
+          return { ok: false, http: 0, body: { msg: 'Falha de rede ao falar com o serviço de assinatura.' } };
+        });
+      }
+
+      // Vínculo de verdade: a lsic_/lsak_ desta conta não é aceita (revogada,
+      // instalação errada, sem chave no header) — só aqui faz sentido mandar
+      // trocar a chave no card. HTTP puro (401/403) não basta: a cerimônia
+      // devolve 403 de sessão/permissão com o mesmo código.
+      function erroDeVinculo(resp) {
+        if (resp.http !== 401 && resp.http !== 403) return false;
+        return /unauthorized|instala[cç][aã]o revogada|chave de assinatura n[aã]o informada|chave de integra[cç][aã]o revogada/i.test((resp.body && resp.body.msg) || '');
+      }
+
+      // Sessão da cerimônia (cookie do BFF com a API) se perdeu no meio do
+      // fluxo — não é vínculo. A API reconstrói pelo progresso salvo no banco
+      // (tab_desafio_autenticacao / tab_identificacao_biometrica), então o
+      // jeito de recuperar é retomar o progresso, não pedir pra trocar chave.
+      function sessaoCerimoniaPerdida(resp) {
+        return /sess[aã]o expirada,?\s*fa[çc]a login novamente|sess[aã]o n[aã]o autorizada|sess[aã]o de assinatura inv[aá]lida/i.test((resp.body && resp.body.msg) || '');
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function pararPoll() {
+        if (state.pollTimer) {
+          clearTimeout(state.pollTimer);
+          state.pollTimer = null;
+        }
+      }
+
+      function show(html, wide) {
+        pararPoll();
+        main.className = wide ? 'wide' : '';
+        main.innerHTML = html;
+      }
+
+      function setMsg(texto, kind) {
+        var el = document.getElementById('msg');
+        if (!el) return;
+        el.textContent = texto || '';
+        el.className = 'msg' + (kind ? ' ' + kind : '');
+      }
+
+      function telaCarregando(texto) {
+        show(
+          '<div class="card"><h2>' + escapeHtml(texto || 'Carregando…') + '</h2>' +
+          '<div class="spinner"></div></div>'
+        );
+      }
+
+      function telaErro(titulo, mensagem, retry) {
+        show(
+          '<div class="card"><h2>' + escapeHtml(titulo || 'Não foi possível continuar') + '</h2>' +
+          '<p class="sub">' + escapeHtml(mensagem || 'Ocorreu um erro interno, tente novamente em instantes.') + '</p>' +
+          '<button type="button" class="primary" id="btnRetry">Tentar novamente</button>' +
+          '<button type="button" class="link" id="btnSite">Assinar pelo site (alternativa)</button></div>'
+        );
+        document.getElementById('btnRetry').addEventListener('click', retry || resolverGate);
+        document.getElementById('btnSite').addEventListener('click', abrirSite);
+      }
+
+      function abrirSite() {
+        var url = state.documentoId ? SITE_URL + '/assinar/' + state.documentoId : SITE_URL;
+        window.open(url, '_blank');
+      }
+
+      // Só limpa o resquício do fluxo antigo (lsak_ colada, sessionStorage) —
+      // a lsic_ é a credencial vinculada no card, não é revogada por aqui.
+      function limparChave() {
+        state.chave = null;
+        sessionStorage.removeItem(LSAK_KEY);
+      }
+
+      // Espelho de resolverDesvioQualificacao do site: decide o desvio a partir
+      // de next_step estruturado (preferência) ou das msgs reais dos use cases.
+      // Onboarding (perfil, 2FA, biometria) não roda mais aqui — quem cair nisso
+      // volta pro site, que já cuidou disso antes da chave ser emitida.
+      function resolverDesvio(resp) {
+        var body = resp.body || {};
+        var nextStep = body.data && body.data.next_step;
+        var msg = body.msg || '';
+        if (nextStep === 'ACEITAR_TERMO') return { tipo: 'termo', termoId: (body.data && body.data.termo_id) || null, documentoId: (body.data && body.data.documento_id) || null };
+        if (nextStep === 'CADASTRAR_BIOMETRIA' || nextStep === 'REDEFINIR_SENHA' || nextStep === 'SETUP_2FA' || nextStep === 'CRIAR_PERFIL') {
+          return { tipo: 'site' };
+        }
+        if (/cadastro biom[eé]trico incompleto|biometria n[aã]o cadastrada/i.test(msg)) return { tipo: 'site' };
+        if (/termo de responsabilidade n[aã]o aceito, aceite o termo/i.test(msg)) {
+          return { tipo: 'termo', termoId: (body.data && body.data.termo_id) || null, documentoId: (body.data && body.data.documento_id) || null };
+        }
+        if (/redefini[cç][aã]o de senha|autentica[cç][aã]o de dois fatores|perfil n[aã]o cadastrado|complete seu cadastro de perfil/i.test(msg)) {
+          return { tipo: 'site' };
+        }
+        return null;
+      }
+
+      function aplicarDesvio(desvio, msg) {
+        if (desvio.tipo === 'termo') return telaTermoDocumento(desvio.termoId, desvio.documentoId);
+        if (desvio.tipo === 'site') return telaCompletarNoSite(msg);
+        telaErro(null, msg);
+      }
+
+      function telaCompletarNoSite(msg) {
+        show(
+          '<div class="card"><h2>Cadastro incompleto</h2>' +
+          '<p class="sub">' + escapeHtml(msg || 'Conclua seu cadastro (senha, dois fatores, perfil ou foto de referência) no site antes de assinar pelo Workspace.') + '</p>' +
+          '<button type="button" class="primary" id="btnSite">Abrir o site</button>' +
+          '<button type="button" class="link" id="btnRetry">Já concluí — verificar novamente</button></div>'
+        );
+        document.getElementById('btnSite').addEventListener('click', abrirSite);
+        document.getElementById('btnRetry').addEventListener('click', carregarProgresso);
+      }
+
+      // ----------------------------------------------------------------
+      // Entrada: convite -> chave de integração (lsak_) do signatário -> gate
+      // ----------------------------------------------------------------
+
+      function iniciar() {
+        if (!CONVITE.convite || !CONVITE.documento_id) {
+          show(
+            '<div class="card"><h2>Abra pelo link do convite</h2>' +
+            '<p class="sub">Esta cerimônia só funciona a partir do link recebido por e-mail para o documento que você precisa assinar.</p>' +
+            '<button type="button" class="link" id="btnSite">Abrir o site</button></div>'
+          );
+          document.getElementById('btnSite').addEventListener('click', abrirSite);
+          return;
+        }
+        telaCarregando('Validando o convite…');
+        var query = '?documento_id=' + encodeURIComponent(CONVITE.documento_id) +
+          '&pedido_id=' + encodeURIComponent(CONVITE.pedido_id) +
+          '&email=' + encodeURIComponent(CONVITE.email) +
+          '&convite=' + encodeURIComponent(CONVITE.convite);
+        api('get', '/assinatura/convite' + query).then(function (resp) {
+          if (!resp.ok) {
+            show(
+              '<div class="card"><h2>Convite indisponível</h2>' +
+              '<p class="sub">' + escapeHtml((resp.body && resp.body.msg) || 'Convite inválido ou expirado.') + '</p>' +
+              '<p class="sub">Peça um novo convite ao solicitante ou use o site.</p>' +
+              '<button type="button" class="link" id="btnSite">Abrir o site</button></div>'
+            );
+            document.getElementById('btnSite').addEventListener('click', abrirSite);
+            return;
+          }
+          state.tituloDocumento = resp.body.data && resp.body.data.titulo;
+          if (state.instalacaoKey) return validarConviteInstalacao();
+          if (state.chave) return resolverGate();
+          telaVincularNoCard();
+        });
+      }
+
+      // Conta Google já com lsic_ vinculada: confirma que o convite é desta
+      // mesma pessoa (e-mail do convite === e-mail da conta) — sem colar
+      // lsak_ nenhuma aqui. Convite de outra pessoa cai na tela de vínculo.
+      function validarConviteInstalacao() {
+        telaCarregando('Confirmando seu acesso…');
+        api('post', '/assinatura/convite/instalacao', {
+          documento_id: CONVITE.documento_id,
+          pedido_id: CONVITE.pedido_id,
+          convite: CONVITE.convite,
+          email: CONVITE.email
+        }).then(function (resp) {
+          if (!resp.ok) {
+            return telaVincularNoCard((resp.body && resp.body.msg) || 'Não foi possível confirmar seu acesso com a conta vinculada.');
+          }
+          resolverGate();
+        });
+      }
+
+      // A lsak_ só é colada uma vez, no card "Vincular chave" do Addon — não
+      // existe mais tela de colar a chave aqui na cerimônia. Com lsic_ já
+      // vinculada mas rejeitada (sessão expirada na API ou convite de outra
+      // pessoa), o jeito é trocar a chave no card. Sem lsic_ nesta conta, o
+      // jeito é vincular. Nos dois casos, o site é a alternativa.
+      function telaVincularNoCard(aviso) {
+        limparChave();
+        var comLsic = !!state.instalacaoKey;
+        var instrucao = comLsic
+          ? 'A chave vinculada nesta conta não é válida para este convite. Abra o card <b>Assinatura Digital</b> no Google Workspace e confira ou troque a chave em "Trocar chave vinculada".'
+          : 'Abra o card <b>Assinatura Digital</b> no Google Workspace e use "Vincular chave" com a chave de integração desta pessoa. Depois volte em "Documentos para assinar" e abra este convite de novo.';
+        show(
+          '<div class="card"><h2>' + (comLsic ? 'Vínculo inválido para este convite' : 'Vincule sua chave no card do Addon') + '</h2>' +
+          '<p class="sub">' +
+          (state.tituloDocumento
+            ? 'Documento: <b>' + escapeHtml(state.tituloDocumento) + '</b>. '
+            : '') +
+          instrucao + '</p>' +
+          (aviso ? '<p class="msg error">' + escapeHtml(aviso) + '</p>' : '') +
+          (comLsic ? '' : '<button type="button" class="primary" id="btnRetry">Já vinculei — verificar novamente</button>') +
+          '<button type="button" class="link" id="btnSite">Prefiro assinar pelo site</button></div>'
+        );
+        if (!comLsic) document.getElementById('btnRetry').addEventListener('click', function () { window.location.reload(); });
+        document.getElementById('btnSite').addEventListener('click', abrirSite);
+      }
+
+      // ----------------------------------------------------------------
+      // Gate: progresso da cerimônia decide onboarding x OTP x câmera x PDF
+      // ----------------------------------------------------------------
+
+      function resolverGate() {
+        state.autoHandoffFeito = false;
+        carregarProgresso();
+      }
+
+      function carregarProgresso() {
+        telaCarregando('Verificando o progresso da assinatura…');
+        api('get', '/assinatura/sessao/progresso?documento_id=' + encodeURIComponent(state.documentoId))
+          .then(interpretarProgresso);
+      }
+
+      function interpretarProgresso(resp) {
+        if (!resp.ok) {
+          if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+          // Perder a sessão carregando o próprio progresso não tem pra onde retomar
+          // automaticamente — tela de erro com "tentar novamente" em vez de loop.
+          if (sessaoCerimoniaPerdida(resp)) return telaErro(null, 'A sessão da cerimônia foi reiniciada. Tente novamente.', carregarProgresso);
+          var desvio = resolverDesvio(resp);
+          if (desvio) return aplicarDesvio(desvio, resp.body && resp.body.msg);
+          return telaErro(null, resp.body && resp.body.msg, carregarProgresso);
+        }
+        aplicarProgresso((resp.body && resp.body.data) || {});
+      }
+
+      // Mesmo contrato do site: etapa 0..3 (statusBiometriaAssinatura) ou 'otp'.
+      function aplicarProgresso(data) {
+        var etapa = data.etapa;
+        if (etapa !== 'otp' && etapa !== null && etapa !== undefined) etapa = Number(etapa);
+        if (etapa === 2) return telaDocumento();
+        if (etapa === 1) return telaValidando();
+        if (etapa === 0) {
+          if (!data.url || !data.identificacao_id) {
+            return telaErro(null, 'Não foi possível preparar o envio da foto, tente novamente em instantes.', carregarProgresso);
+          }
+          state.uploadInfo = { url: data.url, identificacao_id: data.identificacao_id };
+          return telaCameraSelfie();
+        }
+        if (etapa === 3) return telaNegado();
+        if (etapa === 'otp') return telaOtpAssinatura();
+        // etapa null: nenhuma sessão em andamento — abre uma nova (1 handoff).
+        if (state.autoHandoffFeito) {
+          return telaErro(null, 'Não foi possível retomar sua sessão de assinatura.', carregarProgresso);
+        }
+        state.autoHandoffFeito = true;
+        iniciarSessaoAssinatura();
+      }
+
+      function iniciarSessaoAssinatura() {
+        telaCarregando('Iniciando a sessão de assinatura…');
+        api('post', '/assinatura/sessao', { documento_id: state.documentoId }).then(function (resp) {
+          if (!resp.ok) {
+            if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+            if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+            if (/j[aá] existe uma sess[aã]o de assinatura em andamento/i.test((resp.body && resp.body.msg) || '')) {
+              if (state.autoHandoffFeito) {
+                return telaErro(null, 'Não foi possível retomar sua sessão de assinatura.', carregarProgresso);
+              }
+              state.autoHandoffFeito = true;
+              return carregarProgresso();
+            }
+            var desvio = resolverDesvio(resp);
+            if (desvio) return aplicarDesvio(desvio, resp.body && resp.body.msg);
+            return telaErro(null, resp.body && resp.body.msg, iniciarSessaoAssinatura);
+          }
+          var data = (resp.body && resp.body.data) || {};
+          // Sessão já viva: retoma pela etapa em vez de reabrir o OTP.
+          if (data.etapa !== undefined) return aplicarProgresso(data);
+          telaOtpAssinatura();
+        });
+      }
+
+      function telaOtpAssinatura() {
+        show(
+          '<div class="card"><h2>Confirme sua identidade</h2>' +
+          '<p class="sub">Informe o código do autenticador para iniciar a assinatura' +
+          (state.tituloDocumento ? ' de <b>' + escapeHtml(state.tituloDocumento) + '</b>' : '') +
+          '. Este código é o da assinatura, não o do login.</p>' +
+          '<input type="text" id="otp" class="otp" maxlength="6" inputmode="numeric" placeholder="••••••" />' +
+          '<button type="button" class="primary" id="btnOtp">Continuar</button>' +
+          '<div class="msg" id="msg"></div></div>'
+        );
+        var input = document.getElementById('otp');
+        input.focus();
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') confirmarOtpAssinatura(); });
+        document.getElementById('btnOtp').addEventListener('click', confirmarOtpAssinatura);
+      }
+
+      function confirmarOtpAssinatura() {
+        var token = document.getElementById('otp').value.replace(/\D/g, '');
+        if (token.length !== 6) return setMsg('Informe o código de 6 dígitos.', 'error');
+        var btn = document.getElementById('btnOtp');
+        btn.disabled = true;
+        setMsg('Confirmando…');
+        api('post', '/assinatura/sessao/2fa', { token: token }).then(function (resp) {
+          btn.disabled = false;
+          if (!resp.ok) {
+            if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+            if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+            var desvio = resolverDesvio(resp);
+            if (desvio) return aplicarDesvio(desvio, resp.body && resp.body.msg);
+            return setMsg((resp.body && resp.body.msg) || 'Código inválido.', 'error');
+          }
+          var data = (resp.body && resp.body.data) || {};
+          // Desafio já usado (retomada): vem etapa/id sem url — mesmo contrato do progresso.
+          if (data.etapa !== undefined && !data.url) {
+            return aplicarProgresso({ etapa: data.etapa, url: data.url, identificacao_id: data.id });
+          }
+          state.uploadInfo = { url: data.url, identificacao_id: data.id };
+          telaCameraSelfie();
+        });
+      }
+
+      // ----------------------------------------------------------------
+      // Selfie da cerimônia: câmera ao vivo numa aba própria + poll do progresso
+      // ----------------------------------------------------------------
+
+      // O Apps Script serve esta página num iframe (script.google.com ->
+      // googleusercontent.com) sem allow="camera" — o navegador recusa o
+      // getUserMedia mesmo depois de autorizar e recarregar (a permissão fica
+      // no domínio de cima, não no iframe interno). Sem jeito de consertar
+      // isso daqui, e escolher uma imagem do rolo não serve pra identidade.
+      // A câmera ao vivo com captura automática por contagem regressiva roda
+      // numa aba de primeira classe, servida pelo próprio addon-service;
+      // aqui só abre o link e fica de olho no progresso da cerimônia.
+      function montarUrlCaptura() {
+        var params = [
+          'documento_id=' + encodeURIComponent(state.documentoId),
+          'identificacao_id=' + encodeURIComponent(state.uploadInfo.identificacao_id)
+        ];
+        if (state.instalacaoKey) params.push('instalacao=' + encodeURIComponent(state.instalacaoKey));
+        else if (state.chave) params.push('chave=' + encodeURIComponent(state.chave));
+        return SERVICE_BASE + '/assinatura/captura/#' + params.join('&');
+      }
+
+      function telaCameraSelfie() {
+        var urlCaptura = montarUrlCaptura();
+        show(
+          '<div class="card"><h2>Reconhecimento facial</h2>' +
+          '<p class="sub">Posicione o rosto — a foto é automática.</p>' +
+          '<div class="spinner"></div>' +
+          '<p class="footer-link" id="fallbackCaptura" hidden><a href="' + escapeHtml(urlCaptura) + '" target="_blank" rel="noopener">Abrir captura</a></p>' +
+          '<div class="msg" id="msg"></div>' +
+          '<p class="footer-link"><button type="button" class="link" id="btnSite">Prefiro assinar pelo site</button></p></div>'
+        );
+        document.getElementById('btnSite').addEventListener('click', abrirSite);
+        var popup = null;
+        try {
+          popup = window.open(urlCaptura, '_blank');
+        } catch (err) {
+          popup = null;
+        }
+        if (!popup) {
+          var fallback = document.getElementById('fallbackCaptura');
+          if (fallback) fallback.hidden = false;
+        }
+        state.pollTimer = setTimeout(function () { verificarCapturaSelfie(false); }, 4000);
+      }
+
+      function verificarCapturaSelfie(manual) {
+        api('get', '/assinatura/sessao/progresso?documento_id=' + encodeURIComponent(state.documentoId))
+          .then(function (resp) {
+            if (!resp.ok) {
+              if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+              if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+              if (manual) return setMsg((resp.body && resp.body.msg) || 'Erro ao verificar.', 'error');
+              state.pollTimer = setTimeout(function () { verificarCapturaSelfie(false); }, 4000);
+              return;
+            }
+            var data = (resp.body && resp.body.data) || {};
+            var etapa = data.etapa;
+            if (etapa !== 'otp' && etapa !== null && etapa !== undefined) etapa = Number(etapa);
+            if (etapa === 0) {
+              if (manual) setMsg('Ainda não recebemos a foto. Capture na outra aba e volte aqui.', 'error');
+              state.pollTimer = setTimeout(function () { verificarCapturaSelfie(false); }, 4000);
+              return;
+            }
+            aplicarProgresso(data);
+          });
+      }
+
+      function telaValidando() {
+        show(
+          '<div class="card"><h2>Validando reconhecimento facial</h2>' +
+          '<p class="sub">Aguarde enquanto comparamos a foto com o seu perfil biométrico.</p>' +
+          '<div class="spinner"></div></div>'
+        );
+        var tentativas = 0;
+        var tick = function () {
+          api('get', '/assinatura/sessao/statusFoto?documento_id=' + encodeURIComponent(state.documentoId))
+            .then(function (resp) {
+              if (!resp.ok) {
+                if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+                if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+                tentativas += 1;
+                if (tentativas >= MAX_POLL_FOTO) {
+                  return telaErro(null, 'A validação do reconhecimento facial está demorando mais que o esperado.', carregarProgresso);
+                }
+                state.pollTimer = setTimeout(tick, 3000);
+                return;
+              }
+              var data = (resp.body && resp.body.data) || {};
+              if (!data.processado) {
+                tentativas += 1;
+                if (tentativas >= MAX_POLL_FOTO) {
+                  return telaErro(null, 'A validação do reconhecimento facial está demorando mais que o esperado.', carregarProgresso);
+                }
+                state.pollTimer = setTimeout(tick, 2500);
+                return;
+              }
+              var status = Number(data.status);
+              if (status === 2) return telaDocumento();
+              if (status === 3) return telaNegado();
+              telaErro(null, 'Não foi possível confirmar o resultado do reconhecimento facial.', carregarProgresso);
+            });
+        };
+        tick();
+      }
+
+      function telaNegado() {
+        show(
+          '<div class="card"><h2>Reconhecimento facial não validado</h2>' +
+          '<p class="sub">A foto enviada não pôde ser confirmada como sendo sua. Por segurança, aguarde alguns instantes antes de tentar novamente.</p>' +
+          '<button type="button" class="primary" id="btnRetry">Verificar novamente</button>' +
+          '<div class="msg" id="msg"></div></div>'
+        );
+        document.getElementById('btnRetry').addEventListener('click', function () {
+          // Se ainda estiver negado, força um OTP novo (a API substitui a tentativa negada).
+          telaCarregando('Consultando a sessão…');
+          api('get', '/assinatura/sessao/progresso?documento_id=' + encodeURIComponent(state.documentoId))
+            .then(function (resp) {
+              if (resp.ok && Number(resp.body && resp.body.data && resp.body.data.etapa) === 3) {
+                state.autoHandoffFeito = false;
+                return iniciarSessaoAssinatura();
+              }
+              interpretarProgresso(resp);
+            });
+        });
+      }
+
+      // ----------------------------------------------------------------
+      // Documento (PDF) -> estampa -> assinar -> status -> download
+      // ----------------------------------------------------------------
+
+      function telaDocumento() {
+        api('get', '/assinatura/documentos/' + encodeURIComponent(state.documentoId)).then(function (resp) {
+          if (!resp.ok) {
+            if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+            if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+            return telaErro(null, resp.body && resp.body.msg, telaDocumento);
+          }
+          var data = (resp.body && resp.body.data) || {};
+          var st = data.signatario && data.signatario.status;
+          if (st === 'PROCESSING' || st === 'SIGNED') return telaStatus();
+          show(
+            '<div class="card"><h2>' + escapeHtml((data.documento && data.documento.nome) || 'Documento') + '</h2>' +
+            (data.signatario
+              ? '<div class="aviso"><b>' + escapeHtml(data.signatario.nome || '') + '</b><br>' +
+                escapeHtml(data.signatario.email || '') + ' · CPF ' + escapeHtml(data.signatario.cpf_mascarado || '') + '</div>'
+              : '') +
+            '<div class="pdf-col" id="pdf"><div class="spinner"></div></div>' +
+            '<p class="sub">Ao confirmar, uma estampa com seu nome, CPF mascarado, data e código de verificação é aplicada ao PDF.</p>' +
+            '<button type="button" class="primary" id="btnAssinar" disabled>Confirmar assinatura</button>' +
+            '<div class="msg" id="msg"></div></div>',
+            true
+          );
+          renderPdf();
+          document.getElementById('btnAssinar').addEventListener('click', confirmarAssinatura);
+        });
+      }
+
+      function headersCerimonia() {
+        var headers = {};
+        if (state.instalacaoKey) headers['x-instalacao-key'] = state.instalacaoKey;
+        else if (state.chave) headers['x-integracao-key'] = state.chave;
+        return headers;
+      }
+
+      function renderPdf() {
+        var container = document.getElementById('pdf');
+        var btn = document.getElementById('btnAssinar');
+        if (btn) btn.disabled = true;
+        // Bytes vêm do addon-service (proxy do bucket). Iframe da URL
+        // presignada o Chrome bloqueia no overlay do Drive.
+        fetch(SERVICE_BASE + '/assinatura/documentos/' + encodeURIComponent(state.documentoId) + '/pdf', {
+          headers: headersCerimonia()
+        }).then(function (resp) {
+          if (!resp.ok) {
+            return resp.json().catch(function () { return {}; }).then(function (json) {
+              throw new Error((json && json.msg) || 'Não foi possível carregar o documento.');
+            });
+          }
+          return resp.arrayBuffer();
+        }).then(function (buffer) {
+          return pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+        }).then(function (pdf) {
+          container.innerHTML = '';
+          var chain = Promise.resolve();
+          for (var n = 1; n <= pdf.numPages; n++) {
+            (function (pageNum) {
+              chain = chain.then(function () {
+                return pdf.getPage(pageNum).then(function (page) {
+                  var scale = Math.max(0.5, (container.clientWidth - 24) / page.getViewport({ scale: 1 }).width);
+                  var viewport = page.getViewport({ scale: scale });
+                  var canvas = document.createElement('canvas');
+                  canvas.width = viewport.width;
+                  canvas.height = viewport.height;
+                  container.appendChild(canvas);
+                  return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+                });
+              });
+            })(n);
+          }
+          return chain.then(function () {
+            if (btn) btn.disabled = false;
+          });
+        }).catch(function (err) {
+          container.innerHTML = '<p class="sub">' + escapeHtml((err && err.message) || 'Não foi possível carregar a pré-visualização do PDF.') + '</p>';
+          if (btn) btn.disabled = true;
+        });
+      }
+
+      function confirmarAssinatura() {
+        var btn = document.getElementById('btnAssinar');
+        btn.disabled = true;
+        setMsg('Confirmando sua sessão…');
+        // Rehidrata pelo progresso salvo no banco antes do PAdES: garante que o
+        // cookie usado no estampa-url/assinar é o mesmo que já tem a sessão de
+        // assinatura, mesmo se o jar do BFF tiver sido renovado no meio do caminho.
+        api('get', '/assinatura/sessao/progresso?documento_id=' + encodeURIComponent(state.documentoId))
+          .then(function (progresso) {
+            if (!progresso.ok) {
+              btn.disabled = false;
+              if (erroDeVinculo(progresso)) return telaVincularNoCard((progresso.body && progresso.body.msg) || 'Vínculo inválido para este convite.');
+              var desvio = resolverDesvio(progresso);
+              if (desvio) return aplicarDesvio(desvio, progresso.body && progresso.body.msg);
+              return telaErro(null, (progresso.body && progresso.body.msg) || 'Erro ao confirmar sua sessão.', carregarProgresso);
+            }
+            var dataProgresso = (progresso.body && progresso.body.data) || {};
+            var etapa = dataProgresso.etapa;
+            if (etapa !== 'otp' && etapa !== null && etapa !== undefined) etapa = Number(etapa);
+            if (etapa !== 2) {
+              // A etapa real não é mais "documento pronto" — retoma pelo progresso
+              // em vez de assinar às cegas.
+              btn.disabled = false;
+              return aplicarProgresso(dataProgresso);
+            }
+            prosseguirComAssinatura(btn);
+          });
+      }
+
+      function prosseguirComAssinatura(btn) {
+        setMsg('Preparando a assinatura…');
+        api('post', '/assinatura/documentos/' + encodeURIComponent(state.documentoId) + '/estampa-url', { documento_id: state.documentoId })
+          .then(function (presign) {
+            if (!presign.ok) {
+              btn.disabled = false;
+              if (erroDeVinculo(presign)) return telaVincularNoCard((presign.body && presign.body.msg) || 'Vínculo inválido para este convite.');
+              if (sessaoCerimoniaPerdida(presign)) return carregarProgresso();
+              var desvio = resolverDesvio(presign);
+              if (desvio) return aplicarDesvio(desvio, presign.body && presign.body.msg);
+              return setMsg((presign.body && presign.body.msg) || 'Erro ao preparar a assinatura.', 'error');
+            }
+            var eventoId = presign.body && presign.body.data && presign.body.data.id;
+            setMsg('Enviando a assinatura…');
+            api('post', '/assinatura/documentos/' + encodeURIComponent(state.documentoId) + '/assinar', { id: eventoId })
+              .then(function (resp) {
+                if (!resp.ok) {
+                  btn.disabled = false;
+                  if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+                  if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+                  return setMsg((resp.body && resp.body.msg) || 'Erro ao solicitar a assinatura.', 'error');
+                }
+                telaStatus();
+              });
+          });
+      }
+
+      function telaStatus() {
+        show(
+          '<div class="card"><h2>Processando a assinatura</h2>' +
+          '<p class="sub">A assinatura criptográfica com carimbo de tempo está sendo aplicada ao documento.</p>' +
+          '<div class="spinner" id="statusSpinner"></div>' +
+          '<div class="msg" id="msg"></div></div>'
+        );
+        var tick = function () {
+          api('get', '/assinatura/documentos/' + encodeURIComponent(state.documentoId) + '/status').then(function (resp) {
+            if (!resp.ok) {
+              if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+              if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+              state.pollTimer = setTimeout(tick, 3000);
+              return;
+            }
+            var data = (resp.body && resp.body.data) || {};
+            var st = data.signatario && data.signatario.status;
+            if (st === 'SIGNED') return telaConcluida(data);
+            if (st === 'ERROR') {
+              return telaErro('Falha no processamento', 'Não foi possível concluir a assinatura. Tente novamente ou contate o suporte.', telaStatus);
+            }
+            state.pollTimer = setTimeout(tick, 3000);
+          });
+        };
+        tick();
+      }
+
+      function fecharHost() {
+        try {
+          if (google && google.script && google.script.host && typeof google.script.host.close === 'function') {
+            google.script.host.close();
+            return true;
+          }
+        } catch (err) {}
+        return false;
+      }
+
+      var fechandoHost = false;
+      function marcarHomepageEFechar() {
+        if (fechandoHost) return;
+        fechandoHost = true;
+        function depois() {
+          if (!fecharHost()) setMsg('Pode fechar esta janela.');
+        }
+        try {
+          if (google && google.script && google.script.run) {
+            google.script.run
+              .withSuccessHandler(depois)
+              .withFailureHandler(depois)
+              .marcarHomepageAposOverlay();
+            setTimeout(depois, 800);
+            return;
+          }
+        } catch (err) {}
+        depois();
+      }
+
+      function telaConcluida(data) {
+        show(
+          '<div class="card"><h2>Assinatura concluída</h2>' +
+          '<p class="sub">O PDF assinado volta para a pasta do documento no Drive.</p>' +
+          '<button type="button" class="primary" id="btnFechar">Fechar</button>' +
+          '<div class="msg" id="msg"></div></div>'
+        );
+        var toast = document.getElementById('toast');
+        if (toast) toast.hidden = false;
+        var btn = document.getElementById('btnFechar');
+        if (btn) btn.addEventListener('click', marcarHomepageEFechar);
+        setTimeout(marcarHomepageEFechar, 1200);
+      }
+
+      function telaAceiteTermo(termo, titulo, aposAceite, documentoId) {
+        show(
+          '<div class="card"><h2>' + escapeHtml(titulo) + '</h2>' +
+          '<p class="sub"><b>' + escapeHtml(termo.titulo_termo || 'Termo de responsabilidade') + '</b></p>' +
+          '<div class="termo-box">' + escapeHtml(termo.descricao_termo || '') + '</div>' +
+          '<button type="button" class="primary" id="btnAceitar">Li e aceito o termo</button>' +
+          '<div class="msg" id="msg"></div></div>'
+        );
+        document.getElementById('btnAceitar').addEventListener('click', function () {
+          var btn = document.getElementById('btnAceitar');
+          btn.disabled = true;
+          api('post', '/assinatura/termos/aceite', { termo_id: termo.id, documento_id: documentoId || state.documentoId }).then(function (resp) {
+            btn.disabled = false;
+            if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+            if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+            // "Já aceitou este termo" não é erro — o fluxo seguinte decide a etapa.
+            if (!resp.ok && !/j[aá] aceitou este termo/i.test((resp.body && resp.body.msg) || '')) {
+              return setMsg((resp.body && resp.body.msg) || 'Erro ao registrar o aceite.', 'error');
+            }
+            aposAceite();
+          });
+        });
+      }
+
+      function telaTermoDocumento(termoId, documentoId) {
+        telaCarregando('Carregando o termo de responsabilidade…');
+        var query = termoId
+          ? '?filter=id&search=' + encodeURIComponent(termoId)
+          : '?filter=tipo_termo&search=TERMO_DOCUMENTO';
+        api('get', '/assinatura/termos' + query).then(function (resp) {
+          if (!resp.ok) {
+            if (erroDeVinculo(resp)) return telaVincularNoCard((resp.body && resp.body.msg) || 'Vínculo inválido para este convite.');
+            if (sessaoCerimoniaPerdida(resp)) return carregarProgresso();
+            return telaErro(null, resp.body && resp.body.msg, function () { telaTermoDocumento(termoId, documentoId); });
+          }
+          var termos = (resp.body && resp.body.data) || [];
+          var termo = null;
+          for (var i = 0; i < termos.length; i++) {
+            if (termos[i].ativo && (!termoId || termos[i].id === termoId)) { termo = termos[i]; break; }
+          }
+          // termo_id exato desativado: cai para o termo atual do tipo (mesmo fallback do site).
+          if (!termo && termoId) return telaTermoDocumento(null, documentoId);
+          if (!termo) return telaErro(null, 'Termo de responsabilidade não encontrado ou inativo.', function () { telaTermoDocumento(null, documentoId); });
+          telaAceiteTermo(termo, 'Termo de responsabilidade do documento', carregarProgresso, documentoId);
+        });
+      }
+
+      iniciar();
+    </script>
+  </body>
+</html>

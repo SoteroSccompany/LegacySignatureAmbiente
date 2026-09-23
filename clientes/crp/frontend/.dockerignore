@@ -1,0 +1,10 @@
+./API/plugin
+node_modules
+.git
+.gitignore
+Dockerfile
+README.md
+.sql
+.drawio
+.txt
+build

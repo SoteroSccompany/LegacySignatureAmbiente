@@ -1,0 +1,17 @@
+{
+  "name": "investidormatriz",
+  "version": "1.0.0",
+  "main": "key.js",
+  "directories": {
+    "doc": "doc"
+  },
+  "scripts": {
+    "db:backup": "source .env && docker exec $(docker ps -qf \"name=$DB_HOST\") /usr/bin/mysqldump -u root --password=$DB_PASS $DB_DATABASE > snapshot_dev.sql",
+    "db:restore": "source .env && docker exec -i $(docker ps -qf \"name=$DB_HOST\") /usr/bin/mysql -u root --password=$DB_PASS $DB_DATABASE < snapshot_dev.sql && clear"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {}
+}

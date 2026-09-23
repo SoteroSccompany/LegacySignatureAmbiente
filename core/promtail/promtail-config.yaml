@@ -1,0 +1,64 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    # OTIMIZAÇÃO TEMPO REAL: Reduz latência no envio de logs
+    batchwait: 200ms # Aguarda no máximo 200ms antes de enviar batch
+    batchsize: 1048576 # Envia quando atingir 100KB (evita espera desnecessária)
+    timeout: 30s # Aguarda até 30s antes de descartar
+    backoff_config:
+      min_period: 100ms # Aguarda mínimo 100ms entre tentativas
+      max_period: 10s
+
+scrape_configs:
+  # Coleta logs de todos os containers Docker com label logging=promtail
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 1s # MUDANÇA: 5s → 1s (coleta 5x mais rápida)
+        filters:
+          - name: label
+            values: ["logging=promtail"]
+    relabel_configs:
+      # Adiciona labels do container
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: "container"
+        replacement: "${1}"
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: "stream"
+      - source_labels:
+          ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: "service"
+      - source_labels:
+          ["__meta_docker_container_label_com_docker_compose_project"]
+        target_label: "project"
+      - source_labels: ["__meta_docker_container_label_tenant"]
+        target_label: "tenant"
+    pipeline_stages:
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            attrs: attrs
+      - json:
+          expressions:
+            tag: attrs.tag
+          source: attrs
+      - regex:
+          expression: (?P<container_name>(?:[^|]*))\|(?P<image_name>(?:[^|]*))\|(?P<image_id>(?:[^|]*))\|(?P<container_id>(?:[^|]*))
+          source: tag
+      - timestamp:
+          format: RFC3339Nano
+          source: time
+      - labels:
+          stream:
+          container_name:
+          image_name:
+      - output:
+          source: log

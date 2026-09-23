@@ -1,0 +1,120 @@
+name: legacysignature-cliente-${CLIENT_SLUG}
+
+# Template de stack de aplicação por cliente: apisignature, addonservice,
+# proxysignature, frontsignature. Cliente AUTOCONTIDO — esta pasta já traz a
+# cópia-mestre do código-fonte (./api, ./addon-service, ./proxy, ./frontend,
+# ./pdf). O script de provisionamento (deploy/core/scripts/provisionar-
+# cliente.sh) copia esta pasta inteira para deploy/clientes/<slug>/ e só
+# escreve os 4 .env.* novos — não existe código compartilhado entre clientes.
+# Os .env.* de verdade (.env.api/.env.addon/.env.proxy/.env.frontend) NÃO
+# existem aqui no template — cada cliente concreto escreve os seus.
+#
+# Depende da infra do deploy/core/ já estar em pé (redes externas
+# legacysignaturenetwork e storagesignatureexperts, MySQL, Redis, RabbitMQ,
+# facematch). Não existe depends_on entre este compose e o do core — subir
+# deploy/core ANTES de subir qualquer cliente é responsabilidade operacional
+# de quem sobe o ambiente (ver README.md desta pasta).
+
+services:
+  apisignature:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    environment:
+      - TZ=America/Sao_Paulo
+    env_file:
+      - .env.api
+    container_name: "apisignature-${CLIENT_SLUG}"
+    restart: always
+    ports:
+      - "${API_PORT}"
+    networks:
+      - legacysignaturenetwork
+      - storagesignatureexperts
+    tty: true
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    labels:
+      - "logging=promtail"
+      - "tenant=${CLIENT_SLUG}"
+
+  addonservice:
+    build:
+      context: ./addon-service
+      dockerfile: Dockerfile
+    # KEY_API do proxy — o mesmo JWT que proxy/certs monta em `apikey: Bearer …`.
+    # Sem isso o authApi da API recusa o API_KEY da raiz (403 Unauthorizeds).
+    env_file:
+      - .env.addon
+      - .env.proxy
+    environment:
+      - TZ=America/Sao_Paulo
+    container_name: "addonservice-${CLIENT_SLUG}"
+    restart: always
+    # Sem porta publicada no host: a request só chega via proxysignature (/addon).
+    networks:
+      - legacysignaturenetwork
+    tty: true
+    volumes:
+      - ./addon-service:/app
+      - /app/node_modules
+    depends_on:
+      - apisignature
+    labels:
+      - "logging=promtail"
+      - "tenant=${CLIENT_SLUG}"
+
+  proxysignature:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    environment:
+      - TZ=America/Sao_Paulo
+    env_file:
+      - .env.proxy
+    container_name: "proxysignature-${CLIENT_SLUG}"
+    restart: always
+    ports:
+      - "${PROXY_PORT}:${PROXY_PORT}"
+    networks:
+      - legacysignaturenetwork
+      - storagesignatureexperts
+    tty: true
+    volumes:
+      - ./proxy:/app
+      - ./pdf:/app/public-tools
+      - /app/node_modules
+    labels:
+      - "logging=promtail"
+      - "tenant=${CLIENT_SLUG}"
+
+  frontsignature:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.frontend
+    container_name: "frontsignature-${CLIENT_SLUG}"
+    restart: always
+    ports:
+      - "${FRONT_END_PORT}:3395"
+    networks:
+      - legacysignaturenetwork
+    tty: true
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - apisignature
+      - proxysignature
+    labels:
+      - "logging=promtail"
+      - "tenant=${CLIENT_SLUG}"
+
+networks:
+  legacysignaturenetwork:
+    name: legacysignaturenetwork
+    external: true
+  storagesignatureexperts:
+    external: true

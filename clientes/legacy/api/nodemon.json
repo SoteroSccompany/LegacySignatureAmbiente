@@ -1,0 +1,14 @@
+{
+    "ext": "js,json",
+    "ignore": [
+        "node_modules/",
+        "dist/",
+        "build/",
+        "public/",
+        "Logs/",
+        "logs/",
+        ".git/",
+        "*.test.js"
+    ],
+    "exec": "node ./index.js"
+}

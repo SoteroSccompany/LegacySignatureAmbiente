@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Demarcador de Assinaturas — SignatureExperts</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+
+<body>
+    <header class="topbar">
+        <div class="topbar__brand">
+            <span class="topbar__logo">SE</span>
+            <div class="topbar__titles">
+                <h1>Demarcador de Assinaturas</h1>
+                <p id="docInfo">Nenhum PDF carregado</p>
+            </div>
+        </div>
+
+        <div class="topbar__actions">
+            <label class="btn btn--primary" for="fileInput">
+                Abrir PDF
+                <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
+            </label>
+
+            <div class="zoomgroup" role="group" aria-label="Zoom">
+                <button class="btn btn--icon" id="zoomOut" title="Diminuir zoom" disabled>&minus;</button>
+                <span class="zoomgroup__value" id="zoomValue">100%</span>
+                <button class="btn btn--icon" id="zoomIn" title="Aumentar zoom" disabled>+</button>
+                <button class="btn btn--ghost" id="fitWidth" title="Ajustar à largura" disabled>Largura</button>
+                <button class="btn btn--ghost" id="fitPage" title="Ajustar à página" disabled>Página</button>
+            </div>
+
+            <button class="btn btn--ghost" id="toggleSidebar" title="Mostrar/ocultar painel">Painel</button>
+        </div>
+    </header>
+
+    <main class="layout">
+        <aside class="sidebar" id="sidebar">
+            <section class="panel">
+                <h2 class="panel__title">Signatários</h2>
+
+                <form class="form" id="signerForm" autocomplete="off">
+                    <div class="field">
+                        <label for="signerNome">Nome</label>
+                        <input type="text" id="signerNome" placeholder="Maria Silva" required>
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="signerCpf">CPF</label>
+                            <input type="text" id="signerCpf" placeholder="000.000.000-00" inputmode="numeric"
+                                maxlength="14">
+                        </div>
+                        <div class="field field--tight">
+                            <label for="signerOrdem">Ordem</label>
+                            <input type="number" id="signerOrdem" min="1" step="1" placeholder="—">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="signerEmail">E-mail</label>
+                        <input type="email" id="signerEmail" placeholder="maria@empresa.com">
+                    </div>
+
+                    <div class="form__actions">
+                        <button type="submit" class="btn btn--primary btn--block" id="signerSubmit">
+                            Adicionar signatário
+                        </button>
+                        <button type="button" class="btn btn--ghost" id="signerCancel" hidden>Cancelar</button>
+                    </div>
+                    <p class="form__hint" id="signerHint"></p>
+                </form>
+
+                <ul class="signers" id="signersList"></ul>
+                <p class="empty" id="signersEmpty">Nenhum signatário cadastrado.</p>
+            </section>
+
+            <section class="panel" id="markPanel" hidden>
+                <h2 class="panel__title">Marcação selecionada</h2>
+
+                <div class="field">
+                    <label for="markTipo">Tipo</label>
+                    <select id="markTipo">
+                        <option value="assinatura">Assinatura</option>
+                        <option value="rubrica">Rubrica</option>
+                        <option value="nome">Nome</option>
+                        <option value="data">Data</option>
+                        <option value="cpf">CPF</option>
+                    </select>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="markX">X (%)</label>
+                        <input type="number" id="markX" step="0.1" min="0" max="100">
+                    </div>
+                    <div class="field">
+                        <label for="markY">Y (%)</label>
+                        <input type="number" id="markY" step="0.1" min="0" max="100">
+                    </div>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="markW">Largura (%)</label>
+                        <input type="number" id="markW" step="0.1" min="0.5" max="100">
+                    </div>
+                    <div class="field">
+                        <label for="markH">Altura (%)</label>
+                        <input type="number" id="markH" step="0.1" min="0.5" max="100">
+                    </div>
+                </div>
+
+                <dl class="meta" id="markMeta"></dl>
+
+                <div class="form__actions">
+                    <button type="button" class="btn btn--danger btn--block" id="markDelete">Remover marcação</button>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel__title">Payload</h2>
+                <div class="toolbelt">
+                    <button class="btn btn--primary" id="generate" disabled>Gerar</button>
+                    <button class="btn btn--ghost" id="copyJson" disabled>Copiar</button>
+                    <button class="btn btn--ghost" id="downloadJson" disabled>Baixar</button>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="snapGrid">
+                    <span>Alinhar à grade (0,5%)</span>
+                </label>
+                <pre class="output" id="output">[]</pre>
+            </section>
+
+            <section class="panel panel--muted">
+                <h2 class="panel__title">Como usar</h2>
+                <ol class="help">
+                    <li>Abra um PDF.</li>
+                    <li>Cadastre os signatários.</li>
+                    <li>Selecione um signatário na lista.</li>
+                    <li>Arraste sobre a página para demarcar (ou dê duplo clique para o tamanho padrão).</li>
+                    <li>Ajuste arrastando as alças; <kbd>Delete</kbd> remove, setas movem.</li>
+                    <li>Clique em <strong>Gerar</strong> para obter o array.</li>
+                </ol>
+            </section>
+        </aside>
+
+        <section class="viewer" id="viewer">
+            <div class="dropzone" id="dropzone">
+                <div class="dropzone__inner">
+                    <h2>Arraste um PDF aqui</h2>
+                    <p>ou use o botão <strong>Abrir PDF</strong> no topo</p>
+                </div>
+            </div>
+            <div class="pages" id="pages" hidden></div>
+        </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

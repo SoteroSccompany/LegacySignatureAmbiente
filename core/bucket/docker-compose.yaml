@@ -1,0 +1,129 @@
+name: signatureexperts-bucket
+
+services:
+  # 🔐 Cofre de Chaves (KMS) — HashiCorp Vault com Transit Engine.
+  # Modo server com storage em arquivo (persistente): as chaves sobrevivem
+  # a restart/recreate do container. O init/unseal é automatizado pelo
+  # vault-init (chaves de unseal em .docker/vault-keys — só para DEV).
+  vaultkmssignatureexperts:
+    image: hashicorp/vault:1.15.0
+    container_name: "${VAULT_KMS_HOST}"
+    restart: always
+    cap_add:
+      - IPC_LOCK
+    command: server
+    ports:
+      - "${VAULT_KMS_PORT}:8200"
+    volumes:
+      - ./vault-config.hcl:/vault/config/vault.hcl:ro
+      - ./.docker/vault-data:/vault/data
+    networks:
+      - storagesignatureexperts
+      - signatureexpertsbucketnetwork
+    labels:
+      - "logging=promtail"
+
+  # 🔧 Init do Vault (one-shot, idempotente): inicializa/desela o Vault,
+  # cria o token fixo usado pelo SeaweedFS, habilita o Transit Engine e
+  # cria a chave de criptografia usada pelo SSE-KMS dos buckets.
+  vaultinitsignatureexperts:
+    image: hashicorp/vault:1.15.0
+    container_name: vaultinitsignatureexperts
+    depends_on:
+      - vaultkmssignatureexperts
+    environment:
+      VAULT_KMS_HOST: "${VAULT_KMS_HOST}"
+      VAULT_KMS_ROOT_TOKEN: "${VAULT_KMS_ROOT_TOKEN}"
+      BUCKET_KMS_KEY_NAME: "${BUCKET_KMS_KEY_NAME}"
+    entrypoint: ["/bin/sh", "/scripts/vault-init.sh"]
+    volumes:
+      - ./scripts/vault-init.sh:/scripts/vault-init.sh:ro
+      - ./.docker/vault-keys:/vault/keys
+    networks:
+      - storagesignatureexperts
+      - signatureexpertsbucketnetwork
+
+  # 🌊 Object Storage — SeaweedFS com API S3 e SSE-KMS nativo via Vault
+  # Transit. A config do S3 (identities + bloco kms) é gerada no entrypoint
+  # a partir das variáveis de ambiente (ver entrypoint.sh).
+  bucketsignatureexperts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: "${BUCKET_HOST}"
+    restart: always
+    depends_on:
+      - vaultkmssignatureexperts
+    environment:
+      TZ: America/Sao_Paulo
+      BUCKET_ROOT_USER: "${BUCKET_ROOT_USER}"
+      BUCKET_ROOT_PASSWORD: "${BUCKET_ROOT_PASSWORD}"
+      VAULT_KMS_HOST: "${VAULT_KMS_HOST}"
+      VAULT_KMS_ROOT_TOKEN: "${VAULT_KMS_ROOT_TOKEN}"
+    ports:
+      - "${BUCKET_PORT}:8333"        # API S3
+      - "${BUCKET_MASTER_PORT}:9333" # Master UI
+    volumes:
+      - ./.docker/bucket-data:/data
+    networks:
+      - signatureexpertsbucketnetwork
+      - storagesignatureexperts
+    labels:
+      - "logging=promtail"
+
+  # 🖥️ Admin UI do SeaweedFS — console web com gestão de buckets, file
+  # browser, usuários e status do cluster. Login: BUCKET_ROOT_USER/PASSWORD.
+  adminuisignatureexperts:
+    image: chrislusf/seaweedfs:latest
+    container_name: adminuisignatureexperts
+    restart: always
+    depends_on:
+      - bucketsignatureexperts
+    command: "admin -ip=0.0.0.0 -port=23646 -master=${BUCKET_HOST}:9333 -dataDir=/data -adminUser=${BUCKET_ROOT_USER} -adminPassword=${BUCKET_ROOT_PASSWORD}"
+    ports:
+      - "${BUCKET_ADMIN_UI_PORT}:23646"
+    volumes:
+      - ./.docker/admin-data:/data
+    networks:
+      - signatureexpertsbucketnetwork
+      - storagesignatureexperts
+    labels:
+      - "logging=promtail"
+
+  # 🛠️ Provisionador de Buckets (one-shot, via AWS CLI):
+  #   - WIP                      → SSE-KMS default, SEM Object Lock
+  #   - VAULT (PDF)              → SSE-KMS + Object Lock COMPLIANCE (WORM)
+  #   - VAULT LEDGER ASSINATURA  → SSE-KMS + Object Lock COMPLIANCE (WORM)
+  #   - VAULT LEDGER SOLICITACAO → SSE-KMS + Object Lock COMPLIANCE (WORM)
+  provisionersignatureexperts:
+    image: amazon/aws-cli
+    container_name: provisionersignatureexperts
+    depends_on:
+      bucketsignatureexperts:
+        condition: service_started
+      vaultinitsignatureexperts:
+        condition: service_completed_successfully
+    environment:
+      AWS_ACCESS_KEY_ID: "${BUCKET_ROOT_USER}"
+      AWS_SECRET_ACCESS_KEY: "${BUCKET_ROOT_PASSWORD}"
+      AWS_DEFAULT_REGION: "us-east-1"
+      BUCKET_HOST: "${BUCKET_HOST}"
+      BUCKET_NAME_WIP: "${BUCKET_NAME_WIP}"
+      BUCKET_NAME_VAULT: "${BUCKET_NAME_VAULT}"
+      BUCKET_NAME_VAULT_LEDGER_ASSINATURA: "${BUCKET_NAME_VAULT_LEDGER_ASSINATURA}"
+      BUCKET_NAME_VAULT_LEDGER_SOLICITACAO: "${BUCKET_NAME_VAULT_LEDGER_SOLICITACAO}"
+      BUCKET_RETENTION_YEARS: "${BUCKET_RETENTION_YEARS}"
+      BUCKET_KMS_KEY_NAME: "${BUCKET_KMS_KEY_NAME}"
+    entrypoint: ["/bin/sh", "/scripts/provision.sh"]
+    volumes:
+      - ./scripts/provision.sh:/scripts/provision.sh:ro
+    networks:
+      - signatureexpertsbucketnetwork
+
+networks:
+  signatureexpertsbucketnetwork:
+    driver: bridge  
+  storagesignatureexperts:
+    external: true
+      
+    

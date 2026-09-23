@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: Infinity
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    uid: infinity
+    isDefault: false
+    editable: true
+    jsonData:
+      tlsSkipVerify: true
+      allowedHosts:
+        - "apisignature:9366"
+        - "http://apisignature:9366"
+      httpHeaderName1: "apikey"
+    secureJsonData:
+      httpHeaderValue1: "Bearer ${API_KEY}"

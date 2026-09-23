@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Addon Service — Admin</title>
+  <style>
+    :root { --navy: #0b1f33; --teal: #0f766e; --mute: #64748b; --tip: #f1f5f9; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: var(--tip); color: var(--navy); }
+    header { background: var(--navy); color: #fff; padding: 18px 24px; }
+    header h1 { margin: 0; font-size: 18px; }
+    header p { margin: 4px 0 0; font-size: 12px; color: #94a3b8; }
+    main { max-width: 880px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 10px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(15, 23, 42, .08); }
+    .card h2 { margin: 0 0 12px; font-size: 15px; }
+    label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 4px; color: var(--mute); }
+    input { width: 100%; padding: 9px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; }
+    button { background: var(--teal); color: #fff; border: 0; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; margin-top: 12px; }
+    button.link { background: none; color: #e11d48; padding: 0; margin: 0; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--mute); padding: 8px; border-bottom: 1px solid #e2e8f0; }
+    td { padding: 8px; border-bottom: 1px solid #f1f5f9; }
+    .ok { color: #047857; font-weight: 700; }
+    .rev { color: #e11d48; font-weight: 700; }
+    .segredo { background: var(--tip); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; margin-top: 12px; user-select: all; }
+    .aviso { font-size: 12px; color: var(--mute); margin-top: 8px; }
+    #msg { margin-top: 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Addon Service — Admin</h1>
+    <p>Vincule a chave de integração emitida na tela Integração do site e gere a credencial de instalação do Addon.</p>
+  </header>
+  <main>
+    <div class="card">
+      <h2>Token do admin do serviço</h2>
+      <label for="token">x-admin-token</label>
+      <input id="token" type="password" placeholder="Token configurado no ADMIN_TOKEN do serviço" />
+      <button onclick="carregar()">Entrar</button>
+      <div id="msg"></div>
+    </div>
+
+    <div class="card" id="cardVincular" style="display:none">
+      <h2>Vincular chave da API</h2>
+      <label>Nome da instalação</label>
+      <input id="nome" placeholder="Ex.: Workspace da Contabilidade" />
+      <label>Chave de integração (lsak_...)</label>
+      <input id="chave" placeholder="Cole a chave emitida no site" />
+      <label>E-mail da conta Google (tem que ser o mesmo dono da chave)</label>
+      <input id="email" placeholder="gerente@empresa.com" />
+      <button onclick="vincular()">Vincular e gerar credencial</button>
+      <div id="segredo"></div>
+    </div>
+
+    <div class="card" id="cardLista" style="display:none">
+      <h2>Instalações</h2>
+      <table>
+        <thead>
+          <tr><th>Nome</th><th>Chave</th><th>Admin</th><th>Escopo</th><th>Credencial</th><th>Último uso</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody id="linhas"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    const base = window.location.pathname.replace(/\/admin\/painel.*/, '');
+    const headers = () => ({ 'content-type': 'application/json', 'x-admin-token': document.getElementById('token').value });
+    const msg = (texto, erro) => {
+      const el = document.getElementById('msg');
+      el.textContent = texto;
+      el.style.color = erro ? '#e11d48' : '#047857';
+    };
+
+    async function carregar() {
+      const resp = await fetch(base + '/admin/instalacoes', { headers: headers() });
+      const json = await resp.json();
+      if (!resp.ok) { msg(json.msg || 'Token inválido', true); return; }
+      msg('Autenticado.');
+      document.getElementById('cardVincular').style.display = 'block';
+      document.getElementById('cardLista').style.display = 'block';
+      const linhas = document.getElementById('linhas');
+      linhas.innerHTML = '';
+      (json.data || []).forEach((i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + i.nome + '</td>' +
+          '<td><code>' + i.chave_api_prefixo + '…</code><br><small>' + i.email_usuario + '</small></td>' +
+          '<td>' + (i.chave_admin ? 'Sim' : 'Não') + '</td>' +
+          '<td>' + (i.escopo || '—') + '</td>' +
+          '<td><code>' + i.credencial_prefixo + '…</code></td>' +
+          '<td>' + (i.ultimo_uso || '—') + '</td>' +
+          '<td class="' + (i.status === 'ATIVA' ? 'ok' : 'rev') + '">' + i.status + '</td>' +
+          '<td></td>';
+        if (i.status === 'ATIVA') {
+          const btn = document.createElement('button');
+          btn.className = 'link';
+          btn.textContent = 'Revogar';
+          btn.onclick = async () => {
+            if (!confirm('Revogar a instalação ' + i.nome + '? O Addon vai parar de funcionar.')) return;
+            const r = await fetch(base + '/admin/instalacoes/' + i.id, { method: 'DELETE', headers: headers() });
+            const j = await r.json();
+            msg(j.msg || '', !r.ok);
+            carregar();
+          };
+          tr.lastElementChild.appendChild(btn);
+        }
+        linhas.appendChild(tr);
+      });
+    }
+
+    async function vincular() {
+      const body = JSON.stringify({
+        nome: document.getElementById('nome').value,
+        chave_api: document.getElementById('chave').value,
+        email_usuario: document.getElementById('email').value,
+      });
+      const resp = await fetch(base + '/admin/instalacoes', { method: 'POST', headers: headers(), body });
+      const json = await resp.json();
+      if (!resp.ok) { msg(json.msg || 'Falha ao vincular', true); return; }
+      msg(json.msg || 'Instalação vinculada.');
+      document.getElementById('segredo').innerHTML =
+        '<div class="segredo">' + json.data.credencial + '</div>' +
+        '<p class="aviso">Cole esta credencial na configuração do Addon (Apps Script). Ela não será exibida novamente.' +
+        (json.data.chave_admin ? ' Esta chave é de admin: o Addon pode criar usuários.' : ' Esta chave não é de admin: o Addon não cria usuários.') + '</p>';
+      document.getElementById('chave').value = '';
+      carregar();
+    }
+  </script>
+</body>
+</html>

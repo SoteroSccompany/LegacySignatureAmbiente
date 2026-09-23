@@ -1,0 +1,189 @@
+name: legacysignature-core
+
+# Infra compartilhada entre todos os clientes: banco, redis, rabbitmq,
+# facematch, mailpit, phpmyadmin e observabilidade (loki/promtail/grafana).
+# Os composes de bucket (./bucket) e serversign (./serversign) continuam
+# separados (como já eram) — suba os três juntos, ver README/relatório da
+# migração para o comando exato.
+#
+# Os serviços de aplicação por cliente (apisignature, addonservice,
+# proxysignature, frontsignature) NÃO estão aqui — ver deploy/clientes/.
+
+services:
+  dbsignature:
+    image: mysql:8.4.2
+    command:
+      - mysqld
+      - --innodb-use-native-aio=0
+      - --sql-mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+    container_name: "${DB_HOST}"
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_PASS}"
+      MYSQL_DATABASE: "${DB_DATABASE}"
+      MYSQL_USER: "${DB_USER}"
+      MYSQL_PASSWORD: "${DB_PASS_USER}"
+    tty: true
+    ports:
+      - "3306:${DB_PORT}"
+    volumes:
+      - ./.docker/mysql:/var/lib/mysql
+    networks:
+      - legacysignaturenetwork
+    labels:
+      - "logging=promtail"
+
+  redissignature:
+    container_name: "${REDIS_HOST}"
+    image: redis:7.2.1-alpine
+    restart: always
+    ports:
+      - "${REDIS_PORT}"
+    command: redis-server /data/redis.conf
+    volumes:
+      - ./redis/redis.conf:/data/redis.conf
+      - ./.docker/redis-data/logs:/var/log/redis
+    networks:
+      - legacysignaturenetwork
+    labels:
+      - "logging=promtail"
+
+  rabbitmqsignature:
+    build:
+      context: ./rabbitmq
+      dockerfile: Dockerfile
+    container_name: "${RABBITMQ_HOST}"
+    ports:
+      - "${RABBITMQ_PORT}"
+      - "${RABBITMQ_WEB_PORT}:${RABBITMQ_WEB_PORT}"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_EARLANG_COOKIE}
+    restart: always
+    volumes:
+      - "./.docker/rabbitmq_data:/var/lib/rabbitmq"
+    networks:
+      - legacysignaturenetwork
+    depends_on:
+      - "${DB_HOST}"
+    labels:
+      - "logging=promtail"
+
+  facematch:
+    build:
+      context: ./face-match
+      dockerfile: Dockerfile
+    container_name: facematch
+    restart: always
+    environment:
+      - TZ=America/Sao_Paulo
+      - FACE_MODEL_PACK=${FACE_MODEL_PACK}
+    ports:
+      - "${FACE_PORT}:${FACE_PORT}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${FACE_PORT}/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    networks:
+      - legacysignaturenetwork
+    labels:
+      - "logging=promtail"
+
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: phpmyadmin
+    restart: always
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: "${DB_HOST}"
+      MYSQL_ROOT_PASSWORD: "${DB_PASS}"
+    networks:
+      - legacysignaturenetwork
+    depends_on:
+      - "${DB_HOST}"
+
+  # Mailpit — SMTP de desenvolvimento (captura e-mails; UI em MAILPIT_UI_PORT)
+  mailpitsignature:
+    image: axllent/mailpit:latest
+    container_name: "${MAILPIT_HOST}"
+    restart: always
+    environment:
+      TZ: America/Sao_Paulo
+      MP_MAX_MESSAGES: 5000
+      MP_DATABASE: /data/mailpit.db
+      MP_UI_AUTH: "${MAILPIT_UI_USER}:${MAILPIT_UI_PASS}"
+      MP_SMTP_AUTH: "${MAILPIT_SMTP_USER}:${MAILPIT_SMTP_PASS}"
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "${MAILPIT_UI_PORT}:8025"
+      - "${MAILPIT_SMTP_PORT}:1025"
+    volumes:
+      - ./.docker/mailpit:/data
+    networks:
+      - legacysignaturenetwork
+    labels:
+      - "logging=promtail"
+
+  # Loki - Armazenamento de logs persistente
+  loki:
+    image: grafana/loki:2.9.2
+    container_name: loki
+    restart: always
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./.docker/loki:/loki
+      - ./loki/loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - legacysignaturenetwork
+
+  # Promtail - Coletor de logs dos containers
+  promtail:
+    image: grafana/promtail:3.6.11
+    container_name: promtail
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./promtail/promtail-config.yaml:/etc/promtail/config.yml
+      - ./.docker/promtail:/tmp
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - legacysignaturenetwork
+    depends_on:
+      - loki
+
+  # Grafana - Visualização de logs e dashboards
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: grafana
+    restart: always
+    ports:
+      - "3328:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_PASS}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
+      - API_KEY=${API_KEY}
+    volumes:
+      - ./.docker/grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - legacysignaturenetwork
+    depends_on:
+      - loki
+
+networks:
+  legacysignaturenetwork:
+    name: legacysignaturenetwork
+    driver: bridge
+    external: true
+  storagesignatureexperts:
+    external: true

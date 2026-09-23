@@ -1,0 +1,16 @@
+SIGNSERVER_HOST=signserversignatureexperts
+SIGNSERVER_HTTP_PORT=8080
+SIGNSERVER_HTTPS_PORT=8443
+
+# true em DEV para Admin Web sem client-cert. Em produção: false + mTLS.
+SIGNSERVER_ALLOW_ANY=true
+
+# SoftHSM2 (cofre das chaves de assinatura)
+HSM_TOKEN_LABEL=signatureexperts
+HSM_PIN=
+HSM_SO_PIN=
+HSM_PKCS11_LIB=/usr/lib64/pkcs11/libsofthsm2.so
+
+# Worker CMS provisionado automaticamente
+SIGNER_WORKER_NAME=CMSSignerCarimbo
+SIGNER_KEY_ALIAS=carimbo-key

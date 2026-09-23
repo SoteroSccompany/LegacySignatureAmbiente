@@ -1,0 +1,23 @@
+BUCKET_HOST=bucketsignatureexperts
+BUCKET_PORT=8333
+BUCKET_MASTER_PORT=9333
+# Console web (Admin UI) — login com BUCKET_ROOT_USER / BUCKET_ROOT_PASSWORD
+BUCKET_ADMIN_UI_PORT=23646
+
+BUCKET_ROOT_USER=
+BUCKET_ROOT_PASSWORD=
+
+# Vault (KMS) — Transit Engine usado pelo SSE-KMS do SeaweedFS.
+# Token fixo criado pelo vault-init na primeira subida (root em DEV).
+VAULT_KMS_HOST=vaultkmssignatureexperts
+VAULT_KMS_PORT=8200
+VAULT_KMS_ROOT_TOKEN=
+
+BUCKET_NAME_WIP=wip-signatureexperts
+BUCKET_NAME_VAULT=vault-signatureexperts
+BUCKET_NAME_VAULT_LEDGER_ASSINATURA=ledger-assinatura-signatureexperts
+BUCKET_NAME_VAULT_LEDGER_SOLICITACAO=ledger-solicitacao-signatureexperts
+BUCKET_RETENTION_YEARS=5
+
+# Nome da chave no Transit Engine (criada automaticamente pelo vault-init)
+BUCKET_KMS_KEY_NAME=signatureexperts-key

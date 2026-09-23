@@ -1,0 +1,32 @@
+{
+  "name": "addon-service",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index.js",
+    "migrate": "npx knex migrate:latest",
+    "migrate:status": "npx knex migrate:status",
+    "migrate:rollback": "npx knex migrate:rollback"
+  },
+  "keywords": [],
+  "author": "Gabriel Sotero",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "1.19.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "error-stack-parser": "latest",
+    "express": "^4.21.0",
+    "helmet": "^7.0.0",
+    "ioredis": "^5.3.2",
+    "knex": "latest",
+    "moment": "latest",
+    "moment-timezone": "latest",
+    "mysql2": "latest",
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2",
+    "uuid": "14.0.0"
+  },
+  "description": "Serviço de integração do Addon Google Workspace com a API LegacySignature"
+}

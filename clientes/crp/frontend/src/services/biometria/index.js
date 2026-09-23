@@ -1,0 +1,1 @@
+export { biometriaApi } from "./api";

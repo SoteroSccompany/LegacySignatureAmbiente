@@ -1,0 +1,112 @@
+PORT=9366
+APLICATION_NAME=apisignature
+
+API_KEY=
+JWTAPIKEY=
+DOCUMENTO_VERIFICACAO_SECRET=
+
+REDIS_PORT=
+REDIS_PASS=
+REDIS_HOST=
+# Prefixo aplicado via opcao nativa keyPrefix do ioredis (Redis/Cache). Default '' mantem o
+# comportamento atual (sem prefixo). Usar para isolar chaves entre clientes no mesmo Redis.
+REDIS_KEY_PREFIX=
+
+DB_CLIENT=
+DB_HOST=
+DB_USER=
+DB_PASS=
+DB_DATABASE=
+DB_PORT=
+# RUN_MIGRATIONS=false
+
+
+MAILPASS=
+MAIL=
+PROXY_HOST=
+
+PROXY_PORT=
+
+# STATUSAPLICATION=
+STATUSAPLICATION=
+
+PREFIX_REDIS=
+COOKIE_NAME=
+CRYPT_SESSION=
+
+URL_FRONT=
+
+JWTLOG=
+JWTLOGREFRESH=
+JWTMAILUPDATE=
+JWTMAILERTOKER=
+JWTRECOVERY=
+JWTQRCODESIGN=
+
+
+RABBITMQ_HOST=
+RABBITMQ_USER=
+RABBITMQ_PASSWORD=
+MAXRETRY_RABBITMQ=
+RABBITMQ_DEFAULT_USER=
+RABBITMQ_DEFAULT_PASS=
+RABBITMQ_DEFAULT_VHOST=/
+RABBITMQ_PORT=
+RABBITMQ_WEB_PORT=
+# Vhost usado pela aplicacao ao abrir a conexao amqp (RabbitMqConfig.initConnection). Default
+# '/' mantem o comportamento atual. Usar para isolar filas por cliente no mesmo RabbitMQ.
+RABBITMQ_VHOST=/
+
+
+
+DEFAULT_PASSWORD_HASH=
+DEFAULT_PASS=
+DEFAULT_EMAIL=
+
+# SeaweedFS / Object Storage S3 (assinatura)
+# Em container na mesma rede do bucket: BUCKET_HOST=bucketsignatureexperts
+# Em dev no host: BUCKET_HOST=localhost
+BUCKET_HOST=
+BUCKET_PORT=8333
+# Endereço público do bucket visto pelo browser (rota /bucket do proxy)
+BUCKET_PUBLIC_URL=http://localhost:7749/bucket
+BUCKET_USE_SSL=false
+BUCKET_ACCESS_KEY=
+BUCKET_SECRET_KEY=
+BUCKET_NAME_WIP=wip-signatureexperts
+BUCKET_NAME_VAULT=vault-signatureexperts
+# Anos de retencao COMPLIANCE aplicados ao selar no Vault Bucket
+BUCKET_RETENTION_YEARS=5
+# Prefixo de raiz aplicado (BucketConfig.applyRootPrefix) na origem de cada basePath/objectName
+# gravado no bucket (Ladger*, Documentos, PerfilBiometria, Assinatura). Default '' mantem o
+# comportamento atual. Usar para isolar objetos por cliente no mesmo bucket compartilhado.
+BUCKET_ROOT_PREFIX=
+
+# Selo digital da plataforma (PAdES único no PDF final)
+# Razão social exibida no /Name e /ContactInfo do selo (o Subject no ITI vem do cert do SignServer)
+PLATAFORMA_RAZAO_SOCIAL=
+PLATAFORMA_LOCATION=
+
+# SignServer CE (carimbo do hash inicial / client-side hashing)
+SIGNSERVER_HOST=signserversignatureexperts
+SIGNSERVER_PORT=8080
+SIGNSERVER_USE_SSL=false
+SIGNSERVER_WORKER_CARIMBO=CMSSignerCarimbo
+SIGNSERVER_TIMEOUT=15000
+# Em prod, true força retentativa se o carimbo falhar
+SIGNSERVER_OBRIGATORIO=false
+
+# Com false, a assinatura do documento passa a exigir só o OTP do desafio de assinatura,
+# sem perfil biométrico aprovado nem identificação facial (reconhecimento facial). Default
+# true preserva o comportamento atual (biometria obrigatória).
+ASSINATURA_BIOMETRIA_OBRIGATORIA=true
+
+# Mailpit (SMTP + UI de e-mails em desenvolvimento)
+MAILPIT_HOST=mailpitsignature
+MAILPIT_UI_PORT=8025
+MAILPIT_SMTP_PORT=1025
+MAILPIT_UI_USER=mailpit
+MAILPIT_UI_PASS=mailpitDev@2026
+MAILPIT_SMTP_USER=mailpit
+MAILPIT_SMTP_PASS=mailpitDev@2026
+

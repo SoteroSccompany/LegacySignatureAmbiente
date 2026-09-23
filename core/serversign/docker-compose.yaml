@@ -1,0 +1,74 @@
+name: signatureexperts-serversign
+
+services:
+  signserversignatureexperts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: "${SIGNSERVER_HOST}"
+    restart: always
+    environment:
+      TZ: America/Sao_Paulo #/opt/signserver/res/test/dss10/cert.pfx
+      ALLOW_ANY: "${SIGNSERVER_ALLOW_ANY}"
+      DATABASE_JDBC_URL: "jdbc:h2:/mnt/persistent/signserverdb;DB_CLOSE_DELAY=-1"
+      LOG_AUDIT_TO_DB: "true"
+      HSM_PIN: "${HSM_PIN}"
+      HSM_SO_PIN: "${HSM_SO_PIN}"
+      HSM_TOKEN_LABEL: "${HSM_TOKEN_LABEL}"
+      HSM_PKCS11_LIB: "${HSM_PKCS11_LIB}"
+      # SoftHSM lê tokens deste path (não o /etc/softhsm2.conf padrão).
+      SOFTHSM2_CONF: "/opt/signatureexperts/softhsm/softhsm2.conf"
+    ports:
+      - "${SIGNSERVER_HTTP_PORT}:8080"
+      - "${SIGNSERVER_HTTPS_PORT}:8443"
+    volumes:
+      - ./.docker/signserver-data:/mnt/persistent
+      - ./.docker/softhsm:/opt/signatureexperts/softhsm
+      - ./.docker/shared:/shared
+      - ./certs/ManagementCA.pem:/mnt/external/secrets/tls/cas/ManagementCA.crt:ro
+    networks:
+      - signatureexpertsserversignnetwork
+      - legacysignaturenetwork
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8090/health/ready  || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+    labels:
+      - "logging=promtail"
+
+  # Chave do serviço renomeada (era "provisionersignatureexperts", igual à
+  # do bucket/docker-compose.yaml) para não colidir quando os dois composes
+  # sobem juntos com múltiplos -f: services com a mesma chave são
+  # mesclados/sobrescritos pelo Compose, e um dos dois provisionadores
+  # desaparecia silenciosamente. container_name não muda.
+  provisionerserversignatureexperts:
+    build:
+      context: ./provisioner
+      dockerfile: Dockerfile
+    container_name: provisionerserversignatureexperts
+    depends_on:
+      signserversignatureexperts:
+        condition: service_healthy
+    environment:
+      SIGNSERVER_HOST: "${SIGNSERVER_HOST}"
+      SIGNSERVER_HTTP_PORT: "8080"
+      HSM_PIN: "${HSM_PIN}"
+      HSM_SO_PIN: "${HSM_SO_PIN}"
+      HSM_TOKEN_LABEL: "${HSM_TOKEN_LABEL}"
+      HSM_PKCS11_LIB: "${HSM_PKCS11_LIB}"
+      SIGNER_WORKER_NAME: "${SIGNER_WORKER_NAME}"
+      SIGNER_KEY_ALIAS: "${SIGNER_KEY_ALIAS}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - signatureexpertsserversignnetwork
+
+networks:
+  signatureexpertsserversignnetwork:
+    driver: bridge
+  legacysignaturenetwork:
+    external: true
+    name: legacysignaturenetwork

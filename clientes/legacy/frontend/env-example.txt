@@ -1,0 +1,18 @@
+REACT_APP_APIKEY=
+NODE_ENV=
+
+REACT_APP_BACKEND=http://localhost:7749/signature
+REACT_APP_FRONTEND=http://localhost:3395
+PORT=3395
+
+# Demo de UI sem backend (default: false = API real)
+REACT_APP_UI_MOCK=false
+
+# Tela de manutenção (true = só a tela de manutenção; qualquer outro valor = app normal)
+REACT_APP_MANUTENCAO=false
+
+# Ocultar Solicitações / Nova solicitação no menu e bloquear rotas (true = oculto para todos; default false)
+REACT_APP_OCULTAR_SOLICITACOES=false
+
+# Ocultar Integração no menu e bloquear a rota /integracao (true = oculto para todos; default false)
+REACT_APP_OCULTAR_INTEGRACAO=false
