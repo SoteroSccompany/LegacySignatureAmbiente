@@ -20,6 +20,8 @@ import { getSessionUser } from "../../../utils/roles";
 import {
   criarSignatarioVazio,
   montarPayloadSignatarios,
+  normalizarTelefone,
+  signatariosEfetivos,
 } from "../../../utils/signatarios";
 
 const steps = [
@@ -48,6 +50,7 @@ const NovaSolicitacao = () => {
   const [signatarios, setSignatarios] = useState([criarSignatarioVazio(0)]);
   const [areas, setAreas] = useState([]);
   const [adicionandoMe, setAdicionandoMe] = useState(false);
+  const [unicoSignatario, setUnicoSignatario] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingLabel, setSendingLabel] = useState("");
   const [pageSize, setPageSize] = useState({ width: 612, height: 792 });
@@ -162,10 +165,11 @@ const NovaSolicitacao = () => {
       prev.map((s) =>
         s.id === sid
           ? {
-              ...s,
-              ...dados,
-              autoAssinatura: false,
-            }
+            ...s,
+            ...dados,
+            telefone: normalizarTelefone(dados.telefone || ""),
+            autoAssinatura: false,
+          }
           : s
       )
     );
@@ -173,7 +177,7 @@ const NovaSolicitacao = () => {
 
   // "Me adicionar": acrescenta o usuário logado sem apagar os demais.
   const meAdicionarComoSignatario = async () => {
-    if (adicionandoMe || signatarios.some((s) => s.autoAssinatura)) return;
+    if (adicionandoMe || unicoSignatario || signatarios.some((s) => s.autoAssinatura)) return;
     const session = getSessionUser();
     const termo = (session.email || session.nome || "").trim();
     if (termo.length < 2) {
@@ -212,7 +216,7 @@ const NovaSolicitacao = () => {
         nome: eu.nome || "",
         email: eu.email || "",
         cpf: onlyDigits(eu.cpf || "").slice(0, 11),
-        telefone: onlyDigits(eu.telefone || ""),
+        telefone: normalizarTelefone(eu.telefone || ""),
         usuarioSelecionadoId: eu.user_id || eu.id || null,
       };
       const cpfNorm = dados.cpf;
@@ -266,22 +270,58 @@ const NovaSolicitacao = () => {
     }
   };
 
-  // "Sou o único signatário": apaga os demais e trava a lista (auto_assinatura).
-  const setAutoAssinatura = (checked) => {
-    if (checked) {
+  // "Sou o único signatário": deixa só o usuário logado, com nome e dados do perfil.
+  const setAutoAssinatura = async (checked) => {
+    if (!checked) {
+      setUnicoSignatario(false);
+      setSignatarios([criarSignatarioVazio(0)]);
+      setAreas([]);
+      return;
+    }
+    if (adicionandoMe) return;
+    const session = getSessionUser();
+    const termo = (session.email || session.nome || "").trim();
+    if (termo.length < 2) {
+      toast.error("Não foi possível identificar seu usuário. Faça login novamente.");
+      return;
+    }
+    setAdicionandoMe(true);
+    try {
+      const resp = await panel.buscarUsuariosCadastro(termo);
+      if (!resp.status) {
+        toast.error(resp.msg || "Erro ao carregar seus dados de signatário.");
+        return;
+      }
+      const lista = resp.data || [];
+      const emailNorm = (session.email || "").trim().toLowerCase();
+      const eu =
+        lista.find(
+          (u) =>
+            (session.userId &&
+              (String(u.user_id) === String(session.userId) ||
+                String(u.id) === String(session.userId))) ||
+            (emailNorm &&
+              String(u.email || "")
+                .trim()
+                .toLowerCase() === emailNorm)
+        ) || null;
+      if (!eu) {
+        toast.error(
+          "Seu perfil não foi encontrado na busca. Complete o cadastro de perfil ou preencha os campos manualmente."
+        );
+        return;
+      }
+      const dados = {
+        nome: eu.nome || "",
+        email: eu.email || "",
+        cpf: onlyDigits(eu.cpf || "").slice(0, 11),
+        telefone: normalizarTelefone(eu.telefone || ""),
+        usuarioSelecionadoId: eu.user_id || eu.id || null,
+      };
+      setUnicoSignatario(true);
       setSignatarios((prev) => {
-        const alvo = prev[0] || criarSignatarioVazio(0);
-        return [
-          {
-            ...alvo,
-            autoAssinatura: true,
-            nome: "",
-            email: "",
-            cpf: "",
-            telefone: "",
-            usuarioSelecionadoId: null,
-          },
-        ];
+        const base = prev[0] || criarSignatarioVazio(0);
+        return [{ ...base, ...dados, autoAssinatura: false }];
       });
       setAreas((prev) => {
         const primeiroId = signatarios[0]?.id;
@@ -289,10 +329,9 @@ const NovaSolicitacao = () => {
           ? prev.filter((a) => a.signatarioId === primeiroId)
           : [];
       });
-      return;
+    } finally {
+      setAdicionandoMe(false);
     }
-    setSignatarios([criarSignatarioVazio(0)]);
-    setAreas([]);
   };
 
   const removeSigner = (id) => {
@@ -301,14 +340,17 @@ const NovaSolicitacao = () => {
   };
 
   // Contrato da API (#validarPayload): cpf/email/telefone não podem se
-  // repetir entre os signatários da mesma solicitação. Linha de
-  // autoassinatura fica de fora (campos vazios; backend preenche).
-  const semDuplicados = () => {
-    const normais = signatarios.filter((s) => !s.autoAssinatura);
+  // repetir entre os signatários da mesma solicitação. Linha vazia e
+  // autoassinatura ficam de fora. Campo vazio não conta como duplicado.
+  const semDuplicados = (lista) => {
+    const normais = lista.filter((s) => !s.autoAssinatura);
+    const semRepetidos = (arr) => {
+      const preenchidos = arr.filter(Boolean);
+      return new Set(preenchidos).size === preenchidos.length;
+    };
     const cpfs = normais.map((s) => (s.cpf || "").replace(/\D/g, ""));
     const emails = normais.map((s) => (s.email || "").trim().toLowerCase());
-    const tels = normais.map((s) => (s.telefone || "").replace(/\D/g, ""));
-    const semRepetidos = (arr) => new Set(arr).size === arr.length;
+    const tels = normais.map((s) => normalizarTelefone(s.telefone || ""));
     return semRepetidos(cpfs) && semRepetidos(emails) && semRepetidos(tels);
   };
 
@@ -316,26 +358,40 @@ const NovaSolicitacao = () => {
     if (step === 0) return titulo.trim().length > 2;
     if (step === 1) return Boolean(termoId);
     if (step === 2) return Boolean(file && uploadDone && solicitacaoId);
-    if (step === 3)
+    if (step === 3) {
+      const lista = signatariosEfetivos(signatarios);
       return (
-        signatarios.length > 0 &&
-        signatarios.every((s) => {
+        lista.length > 0 &&
+        lista.every((s) => {
           if (s.autoAssinatura) return true;
           return (
             s.nome &&
             /\S+@\S+\.\S+/.test(s.email) &&
             (jsonConfig.uiMock || isValidCpf(s.cpf)) &&
-            (jsonConfig.uiMock || isValidTelefone(s.telefone))
+            (jsonConfig.uiMock || isValidTelefone(normalizarTelefone(s.telefone)))
           );
         }) &&
-        semDuplicados()
+        semDuplicados(lista)
       );
-    if (step === 4)
+    }
+    if (step === 4) {
       // Contrato da API: exatamente uma demarcação por signatário
-      return signatarios.every(
+      const lista = signatariosEfetivos(signatarios);
+      return lista.every(
         (s) => areas.filter((a) => a.signatarioId === s.id).length === 1
       );
+    }
     return true;
+  };
+
+  const avancar = () => {
+    if (step === 3) {
+      const efetivos = signatariosEfetivos(signatarios);
+      const ids = new Set(efetivos.map((s) => s.id));
+      setSignatarios(efetivos);
+      setAreas((prev) => prev.filter((a) => ids.has(a.signatarioId)));
+    }
+    setStep((s) => s + 1);
   };
 
   const aguardarProcessamento = async (id) => {
@@ -424,13 +480,12 @@ const NovaSolicitacao = () => {
           {steps.map((label, i) => (
             <div
               key={label}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-brand text-xs font-semibold ${
-                i === step
-                  ? "bg-brand-navy text-white"
-                  : i < step
-                    ? "bg-teal-50 text-brand-teal"
-                    : "bg-white text-brand-soft border border-gray-100"
-              }`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-brand text-xs font-semibold ${i === step
+                ? "bg-brand-navy text-white"
+                : i < step
+                  ? "bg-teal-50 text-brand-teal"
+                  : "bg-white text-brand-soft border border-gray-100"
+                }`}
             >
               <span className="opacity-70">{i + 1}</span>
               {label}
@@ -517,10 +572,7 @@ const NovaSolicitacao = () => {
               <button
                 type="button"
                 onClick={meAdicionarComoSignatario}
-                disabled={
-                  adicionandoMe ||
-                  signatarios.some((s) => s.autoAssinatura)
-                }
+                disabled={adicionandoMe || unicoSignatario}
                 className="flex-1 min-w-[12rem] text-left flex items-center gap-2 text-sm font-medium select-none rounded-brand px-3 py-2 border bg-slate-50/80 border-transparent text-brand-ink hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {adicionandoMe
@@ -528,15 +580,14 @@ const NovaSolicitacao = () => {
                   : "Me adicionar como signatário"}
               </button>
               <label
-                className={`flex-1 min-w-[12rem] flex items-center gap-2 text-sm cursor-pointer select-none rounded-brand px-3 py-2 border ${
-                  signatarios.some((s) => s.autoAssinatura)
-                    ? "bg-teal-50 border-teal-100 text-brand-ink"
-                    : "bg-slate-50/80 border-transparent text-brand-ink"
-                }`}
+                className={`flex-1 min-w-[12rem] flex items-center gap-2 text-sm cursor-pointer select-none rounded-brand px-3 py-2 border ${unicoSignatario
+                  ? "bg-teal-50 border-teal-100 text-brand-ink"
+                  : "bg-slate-50/80 border-transparent text-brand-ink"
+                  }`}
               >
                 <input
                   type="checkbox"
-                  checked={signatarios.some((s) => s.autoAssinatura)}
+                  checked={unicoSignatario}
                   onChange={(e) => setAutoAssinatura(e.target.checked)}
                   className="rounded border-gray-300 text-brand-teal focus:ring-brand-teal shrink-0"
                 />
@@ -556,7 +607,7 @@ const NovaSolicitacao = () => {
                 podeRemover={signatarios.length > 1}
               />
             ))}
-            {!signatarios.some((s) => s.autoAssinatura) && (
+            {!unicoSignatario && (
               <button
                 type="button"
                 onClick={addSigner}
@@ -568,8 +619,29 @@ const NovaSolicitacao = () => {
           </div>
         )}
 
+        {isDemarcacaoStep && (
+          <div className="flex justify-between mb-3 shrink-0">
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => setStep((s) => s - 1)}
+              className="px-4 py-2 text-sm font-semibold text-brand-navy disabled:opacity-30"
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              disabled={!canNext() || uploading}
+              onClick={avancar}
+              className="px-5 py-2.5 bg-brand-teal hover:bg-brand-teal-dark disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-brand"
+            >
+              {!canNext() ? "Demarque os signatarios para continuar" : "Continuar"}
+            </button>
+          </div>
+        )}
+
         {step === 4 && (
-          <div className="flex-1 min-h-0 h-[calc(100vh-14rem)]">
+          <div className="flex-1 min-h-0">
             <PdfDemarcacao
               signatarios={signatarios}
               areas={areas}
@@ -619,7 +691,7 @@ const NovaSolicitacao = () => {
         )}
 
         <div
-          className={`flex justify-between ${isDemarcacaoStep ? "mt-3 shrink-0" : "mt-8"}`}
+          className={`flex justify-between mt-8 ${isDemarcacaoStep ? "hidden" : ""}`}
         >
           <button
             type="button"
@@ -633,7 +705,7 @@ const NovaSolicitacao = () => {
             <button
               type="button"
               disabled={!canNext() || uploading}
-              onClick={() => setStep((s) => s + 1)}
+              onClick={avancar}
               className="px-5 py-2.5 bg-brand-teal hover:bg-brand-teal-dark disabled:opacity-40 text-white text-sm font-bold rounded-brand"
             >
               Continuar

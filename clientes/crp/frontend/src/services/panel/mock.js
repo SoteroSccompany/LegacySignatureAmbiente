@@ -528,9 +528,6 @@ export const panelMock = {
 
   async listMeusContratos() {
     await delay();
-    if (!can(CAPABILITY.listMeusContratos)) {
-      return { status: false, data: [], msg: "Sem permissão." };
-    }
     const store = readStore();
     const session = getSessionUser();
     const signerId = resolveOwnerId();
@@ -540,7 +537,7 @@ export const panelMock = {
         const match =
           sig.user_id === signerId ||
           (sig.email || "").toLowerCase() ===
-            (session.email || "").toLowerCase();
+          (session.email || "").toLowerCase();
         if (!match) continue;
         rows.push({
           solicitacao_id: sol.id,

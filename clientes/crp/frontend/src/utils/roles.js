@@ -116,7 +116,7 @@ export const canAccessRoute = (path, role = getRole()) => {
     );
   }
   if (path.startsWith("/contratos")) {
-    return can(CAPABILITY.listMeusContratos, role);
+    return true;
   }
   return true;
 };

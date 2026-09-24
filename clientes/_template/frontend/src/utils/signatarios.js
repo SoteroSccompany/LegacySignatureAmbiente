@@ -5,6 +5,29 @@ import { onlyDigits } from "./validators/identity";
 // valor em api/certs/index.js -> quadro_assinatura_tamanho). Não redimensionar.
 export const QUADRO_ASSINATURA_PT = { largura: 230, altura: 115 };
 
+// DDI 55 na frente deixa o número com mais de 11 dígitos e a checagem
+// de telefone (10 ou 11) recusa. Fica com os últimos 11.
+export const normalizarTelefone = (telefone) => {
+  let digits = onlyDigits(telefone);
+  if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(-11);
+  return digits;
+};
+
+// Linha que o formulário abre em branco. Autoassinatura não entra aqui:
+// os campos vazios são de propósito, o backend preenche.
+export const linhaSignatarioVazia = (s) => {
+  if (!s || s.autoAssinatura) return false;
+  return (
+    !(s.nome || "").trim() &&
+    !(s.email || "").trim() &&
+    !onlyDigits(s.cpf || "") &&
+    !onlyDigits(s.telefone || "")
+  );
+};
+
+export const signatariosEfetivos = (lista) =>
+  (lista || []).filter((s) => !linhaSignatarioVazia(s));
+
 // Coordenadas relativas (origem top-left, 0..1) -> pontos PDF (origem
 // bottom-left, pdf-lib). Contrato da API: [{ data: {nome, email, cpf, telefone, ordem?},
 // sign: [{tipo, pagina, x, y, largura, altura, pdf, pagina_tamanho}] }]
@@ -15,12 +38,12 @@ export const montarPayloadSignatarios = (
 ) => {
   const r2 = (n) => Math.round(n * 100) / 100;
 
-  return signatarios.map((s) => ({
+  return signatariosEfetivos(signatarios).map((s) => ({
     data: {
       nome: (s.nome || "").trim(),
       email: (s.email || "").trim(),
       cpf: onlyDigits(s.cpf || ""),
-      telefone: onlyDigits(s.telefone || ""),
+      telefone: normalizarTelefone(s.telefone || ""),
       ordem: null,
       ...(s.autoAssinatura ? { auto_assinatura: true } : {}),
     },

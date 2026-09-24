@@ -1,1 +1,0 @@
-export { biometriaApi } from "./api";

@@ -75,13 +75,7 @@ const Router = () => {
       />
       <Route
         path="/contratos"
-        element={
-          <RouterWrapper
-            component={Contratos}
-            isPrivate={true}
-            roles={[ROLES.SIGNER]}
-          />
-        }
+        element={<RouterWrapper component={Contratos} isPrivate={true} />}
       />
       <Route
         path="/solicitacoes"

@@ -1,6 +1,0 @@
-.input-no-focus {
-    outline: none !important;
-    box-shadow: none !important;
-    border-color: transparent !important;
-    /* para remover qualquer cor de borda ao focar */
-}

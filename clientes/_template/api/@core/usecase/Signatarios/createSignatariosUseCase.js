@@ -108,8 +108,6 @@ class createSignatariosUseCase {
             if (documento.status !== statusDocumentos.documento_recebido) return { status: false, msg: "Documento não encontrado ou não está pronto para cadastro de signatários." }
             if (solicitacao.status !== statusSolicitacao.upload_concluido) return { status: false, msg: "Solicitação do documento não encontrada ou ainda não concluiu o processamento." }
             if (!documento.hash_original) return { status: false, msg: "Ocorreu um erro interno de auditoria, tente novamente em instantes." }
-            const resolucaoAutoAssinatura = await this.#resolverAutoAssinatura(data);
-            if (!resolucaoAutoAssinatura.status) return resolucaoAutoAssinatura;
             const validacaoPayload = this.#validarPayload(data.signatarios);
             if (!validacaoPayload.status) return validacaoPayload;
             const sha = new SHA(process.env.SHA);

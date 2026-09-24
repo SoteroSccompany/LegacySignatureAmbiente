@@ -8,7 +8,7 @@ import TimelineSolicitacao from "../../../Components/Timeline/Solicitacao";
 import PdfViewer from "../../../Components/Pdf/Viewer";
 import {
   DocumentTextIcon,
-  PencilSquareIcon,
+  EyeIcon,
   ArrowDownTrayIcon,
   ShieldCheckIcon,
   NoSymbolIcon,
@@ -107,15 +107,18 @@ const DetalheSolicitacao = () => {
     return <div className="p-6 text-sm text-brand-soft">Carregando…</div>;
   }
 
+  const documentoCompleto = solicitacao.status === STATUS_SOLICITACAO.CONCLUIDO;
+  const documentoCancelado =
+    solicitacao.status === STATUS_SOLICITACAO.CANCELADO ||
+    solicitacao.documento_status === "DOCUMENTO_CANCELADO";
   const ehDono = solicitacao.owner_user_id === getSessionUser().userId;
   const podeEditar =
     role === ROLES.ADMIN || (can(CAPABILITY.createSolicitacao) && ehDono);
   const podeCancelar =
     (podeEditar || role === ROLES.ADMIN) &&
     !!solicitacao.documento_id &&
-    ![STATUS_SOLICITACAO.CONCLUIDO, STATUS_SOLICITACAO.CANCELADO].includes(
-      solicitacao.status
-    );
+    !documentoCompleto &&
+    !documentoCancelado;
 
   const fecharModalCancelar = () => {
     if (cancelando) return;
@@ -144,9 +147,8 @@ const DetalheSolicitacao = () => {
     <div>
       <Header
         title={solicitacao.titulo}
-        description={`${solicitacao.id} · atualizado ${formatDateAnTime(solicitacao.atualizado_em)}${
-          polling ? " · acompanhando ao vivo" : ""
-        }`}
+        description={`${solicitacao.id} · atualizado ${formatDateAnTime(solicitacao.atualizado_em)}${polling ? " · acompanhando ao vivo" : ""
+          }`}
         icon={DocumentTextIcon}
         hasReturn
         buttonReturnAction={() =>
@@ -182,40 +184,47 @@ const DetalheSolicitacao = () => {
               </p>
             )}
             <div className="flex flex-wrap gap-3">
-              {solicitacao.documento_id && (
-                <Link
-                  to={`/assinar/${solicitacao.documento_id}`}
+              {solicitacao.documento_id && !documentoCompleto && !documentoCancelado && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const link = `${window.location.origin}/assinar/${solicitacao.documento_id}`;
+                    try {
+                      await navigator.clipboard.writeText(link);
+                      toast.success("Link do documento copiado.");
+                    } catch (_) {
+                      toast.error("Não foi possível copiar o link.");
+                    }
+                  }}
                   className="inline-flex items-center gap-2 text-sm font-semibold text-brand-teal hover:underline"
                 >
-                  Pré-visualizar fluxo do signatário
-                </Link>
+                  Copiar link do documento
+                </button>
               )}
-              <button
-                type="button"
-                onClick={async () => {
-                  if (jsonConfig.uiMock) {
-                    toast.success("Download simulado do PDF");
-                    return;
-                  }
-                  if (!solicitacao.documento_id) {
-                    toast.info("Documento ainda em processamento.");
-                    return;
-                  }
-                  const resp = await panel.getDocumentoDownload(
-                    solicitacao.documento_id
-                  );
-                  if (!resp.status || !resp.data?.url) {
-                    toast.error(resp.msg || "Erro ao gerar o download.");
-                    return;
-                  }
-                  window.open(resp.data.url, "_blank", "noopener");
-                }}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-brand-navy hover:underline"
-              >
-                <ArrowDownTrayIcon className="w-4 h-4" />
-                Download
-              </button>
-              {role === ROLES.ADMIN && solicitacao.documento_id && (
+              {documentoCompleto && solicitacao.documento_id && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (jsonConfig.uiMock) {
+                      toast.success("Download simulado do PDF");
+                      return;
+                    }
+                    const resp = await panel.getDocumentoDownload(
+                      solicitacao.documento_id
+                    );
+                    if (!resp.status || !resp.data?.url) {
+                      toast.error(resp.msg || "Erro ao gerar o download.");
+                      return;
+                    }
+                    window.open(resp.data.url, "_blank", "noopener");
+                  }}
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-brand-navy hover:underline"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                  Download
+                </button>
+              )}
+              {documentoCompleto && role === ROLES.ADMIN && solicitacao.documento_id && (
                 <Link
                   to={`/auditoria/${solicitacao.documento_id}`}
                   className="inline-flex items-center gap-2 text-sm font-semibold text-brand-navy hover:underline"
@@ -232,7 +241,7 @@ const DetalheSolicitacao = () => {
                   }
                   className="inline-flex items-center gap-2 text-sm font-semibold text-brand-navy hover:underline"
                 >
-                  <PencilSquareIcon className="w-4 h-4" />
+                  <EyeIcon className="w-4 h-4" />
                   Ver demarcações
                 </button>
               )}

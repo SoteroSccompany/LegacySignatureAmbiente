@@ -47,6 +47,7 @@ class CreateIdentidadeUsecase {
                     trocar_senha: true,
                     bloqueado: 0,
                     segredo_dois_fatores: null,
+                    email_verificado: true,
                     codigo_hash: null,
                     dois_fatores: 0,
                     data_criacao: dateNow(),

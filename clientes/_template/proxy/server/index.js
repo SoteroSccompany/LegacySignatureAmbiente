@@ -27,10 +27,6 @@ class Server {
                 origin: (origin, callback) => {
                     const permitidas = [
                         process.env.URL_FRONT,
-                        'http://localhost:5500',
-                        'http://127.0.0.1:5500',
-                        'http://localhost:4173',
-                        'http://127.0.0.1:4173',
                         'https://script.google.com',
                     ].filter(Boolean);
                     if (!origin) return callback(null, true);
@@ -139,13 +135,6 @@ class Server {
                 }
             }));
 
-            // Ferramentas estáticas (demarcador + página de assinatura)
-            // Volume docker: ./pdf -> /app/public-tools
-            app.use('/tools', express.static(path.join(__dirname, '../public-tools')));
-
-            // Bucket (S3): repassa URLs presignadas ao storage interno.
-            // A autenticação é a própria assinatura SigV4 da URL — sem proxyauthorization.
-            // changeOrigin mantém o Host do alvo interno, que é o host assinado na presign.
             const bucketTarget = `http://${process.env.BUCKET_HOST || 'bucketsignatureexperts'}:${process.env.BUCKET_PORT || 8333}`;
             const bucketProxy = createProxyMiddleware('/bucket', {
                 target: bucketTarget,
@@ -229,10 +218,7 @@ class Server {
                 next();
             });
             app.use('/signature', proxy, limiterApi, apiProxy);
-            // Selfie da cerimônia: Helmet global (media-src none + sandbox)
-            // bloqueia getUserMedia e <video>. Esta rota precisa de câmera
-            // ao vivo numa aba top-level — CSP só aqui, sem sandbox.
-            app.use('/addon/assinatura/captura', (req, res, next) => {
+            app.use('/addon/assinatura/captura', limiterApi, (req, res, next) => {
                 res.setHeader('Content-Security-Policy', [
                     "default-src 'self'",
                     "script-src 'self' 'unsafe-inline'",
@@ -249,16 +235,13 @@ class Server {
                 res.removeHeader('X-Frame-Options');
                 next();
             });
-            // Cerimônia no Workspace (HtmlService) e UrlFetch do Apps Script passam por aqui.
-            // limiterApi (500/2min) estoura no poll do FaceMatch e no IP compartilhado do Google.
-            app.use('/addon', (req, res, next) => {
+            app.use('/addon', limiterApi, (req, res, next) => {
                 res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
                 next();
             }, limiterProxy, addonProxy);
-            app.use('/bucket', bucketProxy);
+            app.use('/bucket', limiterApi, bucketProxy);
             app.use(express.urlencoded({ extended: true, limit: '1000mb', parameterLimit: 1000000 }));
             app.use(express.json({ limit: '1000mb', extended: true }));
-
             const PORTAPI = process.env.PORT || 3000;
             app.listen(PORTAPI, () => {
                 console.log(`Servidor rodando na porta ${PORTAPI}`)

@@ -108,8 +108,6 @@ class createSignatariosUseCase {
             if (documento.status !== statusDocumentos.documento_recebido) return { status: false, msg: "Documento não encontrado ou não está pronto para cadastro de signatários." }
             if (solicitacao.status !== statusSolicitacao.upload_concluido) return { status: false, msg: "Solicitação do documento não encontrada ou ainda não concluiu o processamento." }
             if (!documento.hash_original) return { status: false, msg: "Ocorreu um erro interno de auditoria, tente novamente em instantes." }
-            const resolucaoAutoAssinatura = await this.#resolverAutoAssinatura(data);
-            if (!resolucaoAutoAssinatura.status) return resolucaoAutoAssinatura;
             const validacaoPayload = this.#validarPayload(data.signatarios);
             if (!validacaoPayload.status) return validacaoPayload;
             const sha = new SHA(process.env.SHA);
@@ -436,9 +434,7 @@ class createSignatariosUseCase {
 
 
     async #resolverAutoAssinatura(data) {
-        const autoAssinaturaItens = data.signatarios.filter((item) => item?.data?.auto_assinatura === true);
-        if (autoAssinaturaItens.length > 1) return { status: false, msg: "Apenas um signatário pode ser marcado como autoassinatura por vez." }
-        if (autoAssinaturaItens.length === 0) return { status: true }
+        if (data.signatarios.length > 1) return { status: false, msg: "Apenas um signatário pode ser marcado como autoassinatura por vez." }
         const checkPerfil = await repositorioPerfil.getPerfilUsuarioByUserId({ user_id: data.user_id })
         if (!checkPerfil.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
         if (!checkPerfil.exit) return { status: false, msg: "Complete seu cadastro de perfil antes de se adicionar como signatário." }

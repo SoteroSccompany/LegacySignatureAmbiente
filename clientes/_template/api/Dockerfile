@@ -35,6 +35,6 @@ EXPOSE 9366
 
 # Comando para rodar a aplicação
 #Dev
-CMD ["nodemon", "index.js"]
+# CMD ["nodemon", "index.js"]
 #Prod
-# CMD ["node", "index.js"]
+CMD ["pm2-runtime", "ecosystem.config.js"]

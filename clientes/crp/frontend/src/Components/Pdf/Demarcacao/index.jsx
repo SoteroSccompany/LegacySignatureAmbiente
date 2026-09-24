@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "react-toastify";
 import PdfViewer from "../Viewer";
 import { QUADRO_ASSINATURA_PT } from "../../../utils/signatarios";
@@ -10,6 +10,8 @@ const overlaps = (a, b) =>
   a.y < b.y + b.height &&
   a.y + a.height > b.y;
 
+const prender = (valor, tamanho) => Math.min(Math.max(valor, 0), 1 - tamanho);
+
 const PdfDemarcacao = ({
   signatarios = [],
   areas = [],
@@ -20,48 +22,105 @@ const PdfDemarcacao = ({
   readOnly = false,
 }) => {
   const [activeSigner, setActiveSigner] = useState(signatarios[0]?.id || null);
+  const areasRef = useRef(areas);
+  const dragRef = useRef(null);
+  areasRef.current = areas;
 
   const active = signatarios.find((s) => s.id === activeSigner);
 
-  // O use case (#validarPayload) exige quadro de assinatura com tamanho fixo
-  // (quadro_assinatura_tamanho em certs) — aqui convertemos os 230x115pt pra
-  // fração da página clicada, já que a demarcação na tela é toda em 0..1.
+  const tamanhoQuadro = (sizePt) => ({
+    boxWidth: Math.min(QUADRO_ASSINATURA_PT.largura / (sizePt.width || 612), 1),
+    boxHeight: Math.min(QUADRO_ASSINATURA_PT.altura / (sizePt.height || 792), 1),
+  });
+
+  const gravarArea = (novaArea) => {
+    const outrasAreas = areasRef.current.filter((a) => a.signatarioId !== novaArea.signatarioId);
+    if (outrasAreas.some((a) => a.page === novaArea.page && overlaps(a, novaArea))) {
+      toast.error(
+        "Essa área sobrepõe a demarcação de outro signatário. Escolha outro ponto da página."
+      );
+      return false;
+    }
+    onChangeAreas([...outrasAreas, novaArea]);
+    return true;
+  };
+
+  // Canto superior esquerdo no ponto clicado. O tamanho fica 230×115pt.
   const onClickPagina = (pageNumber, sizePt) => (e) => {
     if (readOnly || !active) return;
-    const boxWidth = Math.min(QUADRO_ASSINATURA_PT.largura / (sizePt.width || 612), 1);
-    const boxHeight = Math.min(QUADRO_ASSINATURA_PT.altura / (sizePt.height || 792), 1);
-
+    if (e.target !== e.currentTarget) return;
+    const { boxWidth, boxHeight } = tamanhoQuadro(sizePt);
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = (e.clientX - rect.left) / rect.width;
     const clickY = (e.clientY - rect.top) / rect.height;
-
-    // Centraliza o quadro fixo no ponto clicado, sem deixar sair da página.
-    const x = Math.min(Math.max(clickX - boxWidth / 2, 0), 1 - boxWidth);
-    const y = Math.min(Math.max(clickY - boxHeight / 2, 0), 1 - boxHeight);
     const novaArea = {
       id: `area-${Date.now()}`,
       signatarioId: active.id,
       tipo: "assinatura",
       page: pageNumber,
-      x,
-      y,
+      x: prender(clickX, boxWidth),
+      y: prender(clickY, boxHeight),
       width: boxWidth,
       height: boxHeight,
       pageWidth: sizePt.width,
       pageHeight: sizePt.height,
       cor: active.cor || "#0F766E",
     };
+    const jaTem = areasRef.current.find((a) => a.signatarioId === active.id);
+    if (jaTem) novaArea.id = jaTem.id;
+    gravarArea(novaArea);
+  };
 
-    // Contrato exige exatamente 1 demarcação por signatário — clicar de novo
-    // move o quadro do signatário ativo em vez de acumular várias áreas.
-    const outrasAreas = areas.filter((a) => a.signatarioId !== active.id);
-    if (outrasAreas.some((a) => a.page === novaArea.page && overlaps(a, novaArea))) {
-      toast.error(
-        "Essa área sobrepõe a demarcação de outro signatário. Escolha outro ponto da página."
-      );
-      return;
+  const iniciarArraste = (area) => (e) => {
+    if (readOnly) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const pagina = e.currentTarget.parentElement;
+    if (!pagina) return;
+    dragRef.current = {
+      pointerId: e.pointerId,
+      areaId: area.id,
+      rect: pagina.getBoundingClientRect(),
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startX: area.x,
+      startY: area.y,
+      width: area.width,
+      height: area.height,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setActiveSigner(area.signatarioId);
+  };
+
+  const moverArraste = (e) => {
+    const drag = dragRef.current;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    e.stopPropagation();
+    const dx = (e.clientX - drag.startClientX) / drag.rect.width;
+    const dy = (e.clientY - drag.startClientY) / drag.rect.height;
+    const atuais = areasRef.current;
+    const movida = atuais.find((a) => a.id === drag.areaId);
+    if (!movida) return;
+    const nova = {
+      ...movida,
+      x: prender(drag.startX + dx, drag.width),
+      y: prender(drag.startY + dy, drag.height),
+    };
+    const outras = atuais.filter((a) => a.id !== drag.areaId);
+    if (outras.some((a) => (a.page || 1) === (nova.page || 1) && overlaps(a, nova))) return;
+    onChangeAreas([...outras, nova]);
+  };
+
+  const soltarArraste = (e) => {
+    const drag = dragRef.current;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    dragRef.current = null;
+    e.stopPropagation();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (_) {
+      /* captura já solta */
     }
-    onChangeAreas([...outrasAreas, novaArea]);
   };
 
   return (
@@ -78,11 +137,10 @@ const PdfDemarcacao = ({
               <button
                 type="button"
                 onClick={() => setActiveSigner(s.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-brand border text-sm transition-colors ${
-                  activeSigner === s.id
+                className={`w-full text-left px-3 py-2.5 rounded-brand border text-sm transition-colors ${activeSigner === s.id
                     ? "border-brand-teal bg-teal-50/60"
                     : "border-gray-100 hover:border-gray-200"
-                }`}
+                  }`}
               >
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-full mr-2"
@@ -96,7 +154,7 @@ const PdfDemarcacao = ({
         <p className="text-xs text-brand-soft mt-4 m-0 leading-relaxed">
           {readOnly
             ? "Visualização das demarcações já cadastradas nesta solicitação."
-            : `Selecione um signatário e clique no PDF para posicionar o quadro de assinatura (${QUADRO_ASSINATURA_PT.largura}×${QUADRO_ASSINATURA_PT.altura}pt, tamanho fixo). Clicar novamente move o quadro do signatário selecionado. O documento pode ter mais de uma página — role para ver todas.`}
+            : `Selecione um signatário e clique no PDF para cravar o canto do quadro (${QUADRO_ASSINATURA_PT.largura}×${QUADRO_ASSINATURA_PT.altura}pt). Arraste o quadro para ajustar. O documento pode ter mais de uma página — role para ver todas.`}
         </p>
         {!readOnly && areas.length > 0 && (
           <button
@@ -127,7 +185,12 @@ const PdfDemarcacao = ({
                 return (
                   <div
                     key={a.id}
-                    className="absolute border-2 rounded-sm pointer-events-none flex items-end p-1"
+                    onPointerDown={readOnly ? undefined : iniciarArraste(a)}
+                    onPointerMove={readOnly ? undefined : moverArraste}
+                    onPointerUp={readOnly ? undefined : soltarArraste}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`absolute border-2 rounded-sm flex items-end p-1 ${readOnly ? "pointer-events-none" : "cursor-grab active:cursor-grabbing touch-none"
+                      }`}
                     style={{
                       left: `${a.x * 100}%`,
                       top: `${a.y * 100}%`,
@@ -138,7 +201,7 @@ const PdfDemarcacao = ({
                     }}
                   >
                     <span className="text-[10px] font-bold text-brand-navy bg-white/90 px-1 rounded">
-                      {signer?.nome || "Área"}
+                      {signer?.autoAssinatura ? "Eu mesmo" : signer?.nome || "Área"}
                     </span>
                   </div>
                 );

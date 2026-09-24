@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Header from "../../Components/Header";
 import {
   ShieldCheckIcon,
@@ -30,9 +30,8 @@ const CorEstrutural = {
 
 const BadgeEstrutural = ({ valor }) => (
   <span
-    className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-      CorEstrutural[valor] || "bg-gray-50 text-brand-soft border-gray-200"
-    }`}
+    className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${CorEstrutural[valor] || "bg-gray-50 text-brand-soft border-gray-200"
+      }`}
   >
     {valor}
   </span>
@@ -144,11 +143,10 @@ const Auditoria = () => {
 
       <div className="p-6 space-y-6">
         <div
-          className={`rounded-brand p-5 border shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 ${
-            integro
+          className={`rounded-brand p-5 border shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 ${integro
               ? "bg-emerald-50 border-emerald-200"
               : "bg-rose-50 border-rose-200"
-          }`}
+            }`}
         >
           {integro ? (
             <ShieldCheckIcon className="w-10 h-10 text-emerald-600 shrink-0" />
@@ -240,12 +238,14 @@ const Auditoria = () => {
                       >
                         <ClipboardDocumentIcon className="w-4 h-4 text-brand-soft hover:text-brand-navy" />
                       </button>
-                      <Link
-                        to={`/verificar/${cert.codigo_verificacao}`}
+                      <a
+                        href={`/verificar/${encodeURIComponent(cert.codigo_verificacao)}`}
+                        target="_blank"
+                        rel="noreferrer"
                         className="text-brand-teal font-semibold ml-1"
                       >
-                        portal
-                      </Link>
+                        Conferir documento
+                      </a>
                     </>
                   )}
                 </dd>
@@ -281,8 +281,8 @@ const Auditoria = () => {
                 <dd className="m-0">
                   {cert?.assinatura_criptografica?.carimbado_em
                     ? formatDateAnTime(
-                        cert.assinatura_criptografica.carimbado_em
-                      )
+                      cert.assinatura_criptografica.carimbado_em
+                    )
                     : "—"}
                 </dd>
               </div>

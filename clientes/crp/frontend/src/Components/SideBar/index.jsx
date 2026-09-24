@@ -64,7 +64,7 @@ const Sidebar = () => {
         href: "/contratos",
         icon: FolderIcon,
         current: false,
-        show: can(CAPABILITY.listMeusContratos, role),
+        show: true,
       },
       {
         name: "Alertas",

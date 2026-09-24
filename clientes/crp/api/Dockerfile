@@ -27,6 +27,9 @@ COPY ./package*.json ./
 # Instalando as dependências do projeto
 RUN npm install 
 
+# RUN npm install pm2-runtime -g
+RUN npm install pm2 -g
+
 # Copiando os arquivos do projeto
 COPY ./ ./
 
@@ -35,6 +38,8 @@ EXPOSE 9366
 
 # Comando para rodar a aplicação
 #Dev
-CMD ["nodemon", "index.js"]
+# CMD ["nodemon", "index.js"]
+
 #Prod
-# CMD ["node", "index.js"]
+# CMD ["pm2-runtime", "ecosystem.config.js"]
+CMD ["pm2-runtime", "ecosystem.config.js"]
