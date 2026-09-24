@@ -15,11 +15,11 @@ RUN npm install
 COPY . .
 
 # Compila a aplicação React
-# RUN npm run build
+RUN npm run build
 
 # Expoe a porta na qual a aplicação irá rodar
 EXPOSE 3395
 
 # Define o comando para iniciar a aplicação
-# CMD ["node", "index.js"]
-CMD ["npm", "start"]
+CMD ["node", "index.js"]
+# CMD ["npm", "start"]

@@ -22,7 +22,6 @@ const authMiddleware = async (req, res, next) => {
             res.status(403).json({ status: false, msg: "Token inválidoProxy3" });
         }
     } catch (err) {
-        c
         const msgFile = `Erro ao conferir chave de acesso: ${err.message}\n${err.stack}\n`;
         fs.appendFileSync('logMiddlewareAuth.log', String(msgFile));
         return res.status(403).json({ status: false, msg: "Token inválidoProxy2" });
