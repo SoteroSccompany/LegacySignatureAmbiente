@@ -82,7 +82,7 @@ substituir_env() {
 }
 
 mysql_exec() {
-    docker exec -i "$DB_CONTAINER" sh -c 'exec mysql -N -B -uroot -p"$MYSQL_ROOT_PASSWORD"'
+    docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASS" "$DB_CONTAINER" mysql -N -B -uroot
 }
 
 mysql_scalar() {
@@ -145,6 +145,8 @@ API_CONTAINER="apisignature-${CLIENT_SLUG}"
 container_no_ar "$DB_CONTAINER" || erro "container '$DB_CONTAINER' não está rodando."
 container_no_ar "$RABBITMQ_CONTAINER" || erro "container '$RABBITMQ_CONTAINER' não está rodando."
 container_no_ar "$API_CONTAINER" || erro "container '$API_CONTAINER' não está rodando."
+
+MYSQL_ROOT_PASS=$(exigir_env "$SCRIPT_DIR/.env" "ROOT_PASSWORD")
 
 EXISTE_DB_API=$(mysql_scalar "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '${DB_API}';")
 EXISTE_DB_ADDON=$(mysql_scalar "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '${DB_ADDON}';")
@@ -285,6 +287,21 @@ slug=${CLIENT_SLUG}
 EOF
 
 log "Marcador gravado em ${CLIENT_DIR}/.configurado"
+FRONT_CONTAINER="frontsignature-${CLIENT_SLUG}"
+container_no_ar "$FRONT_CONTAINER" || erro "container '$FRONT_CONTAINER' não está rodando. A chave nova precisa entrar no build do frontend."
+log "Compilando o frontend para gravar a chave nova no pacote."
+env_build=(-e NODE_ENV=production)
+while IFS= read -r linha || [ -n "$linha" ]; do
+    case "$linha" in
+        ''|\#*) continue ;;
+    esac
+    chave=${linha%%=*}
+    valor=${linha#*=}
+    case "$chave" in
+        REACT_APP_*) env_build+=(-e "$chave=$valor") ;;
+    esac
+done < "$ENV_FRONT"
+docker exec -w /app "${env_build[@]}" "$FRONT_CONTAINER" npm run build
 log "Recriando os containers de '${CLIENT_SLUG}' para carregar as chaves novas."
 
 (

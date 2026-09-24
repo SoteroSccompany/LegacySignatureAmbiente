@@ -12,6 +12,7 @@ Logs/*
 public*
 !api/public/
 !api/public/**
+provisionar-server-20260924-001610.zip
 build/
 dist/
 *.sql
