@@ -37,7 +37,7 @@ class updateTermoResponsabilidadeUseCase {
             if ((statusApp.prod === statusAplication.status) && (hashToken !== desafio.desafio_hash)) return { status: false, msg: "Código inválido" }
             const plainSecret = sha.decrypt(user.codigo_hash);
             const isValid = await authenticator.verify({
-                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName
+                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName, epochTolerance: 60
             });
             if (!isValid.valid) return { status: false, msg: "Código de autenticação inválido." }
             const encryptAgent = sha.encrypt(data.request_user.userAgent);

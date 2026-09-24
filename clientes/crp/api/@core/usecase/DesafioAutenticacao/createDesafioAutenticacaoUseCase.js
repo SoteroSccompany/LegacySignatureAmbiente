@@ -38,12 +38,12 @@ class createDesafioAutenticacaoUseCase {
             const hashSecret = sha.encrypt(plainSecret);
             const oldUser = { ...user };
             user.codigo_hash = hashSecret;
-            const optCode = await authenticator.generate({ secret: plainSecret, epochTolerance: 120 });
+            const optCode = await authenticator.generate({ secret: plainSecret, epochTolerance: 60 });
             if (statusApp.dev === statusAplication.status) {
                 console.log(optCode)
             }
             objDesafioAutenticacao.desafio_hash = sha.hash(optCode);
-            const otpAuthUrl = authenticator.generateURI({ secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName, epochTolerance: 120 });
+            const otpAuthUrl = authenticator.generateURI({ secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName, epochTolerance: 60 });
             const qrCodeImage = await qrCode.toDataURL(otpAuthUrl);
             const trx = await knex.transaction();
             try {
@@ -107,7 +107,7 @@ class createDesafioAutenticacaoUseCase {
             const sha = new SHA(process.env.SHA);
             const plainSecret = sha.decrypt(user.codigo_hash);
             const isValid = await authenticator.verify({
-                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName
+                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName, epochTolerance: 60
             });
             const tokenInterno = sha.hash(data.token);
             if (statusApp.prod === statusAplication.status && tokenInterno !== desafio.desafio_hash) return { status: false, msg: "Código de autenticação inválido." }
@@ -211,7 +211,7 @@ class createDesafioAutenticacaoUseCase {
             if ((statusAplication.status === statusApp.prod) && (sha.hash(data.token) !== desafio.desafio_hash)) return { status: false, deleteLogin: true, msg: "Código de autenticação inválido." }
             const plainSecret = sha.decrypt(user.codigo_hash);
             const isValid = await authenticator.verify({
-                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName
+                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName, epochTolerance: 60
             });
             if (!isValid.valid) return { status: false, deleteLogin: true, msg: "Código de autenticação inválido." }
             data.userAgent = sha.encrypt(data.userAgent);

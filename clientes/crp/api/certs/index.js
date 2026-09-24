@@ -52,7 +52,7 @@ module.exports = {
         cep: '34006-002',
         phone: '(31) 3422-1332',
         linkWppRegularizarPendencias: 'https://wa.me/553134221332?text=Ol%C3%A1%21+Gostaria+de+ajuda+na+minha+situa%C3%A7%C3%A3o',
-        email: 'netfaturas@netexperts.com.br', //Trocar 
+        email: 'assinatura@netexperts.com.br', //Trocar 
         emailContato: 'financeiro@netexperts.com.br',
         nameSoftware: 'Net Sign',
         timeLogin: 30,
@@ -222,7 +222,7 @@ module.exports = {
         limit: 20
     },
     confiDoisFatores: {
-        time: 30,
+        time: 60,
         timeSetup: 120,
         timeType: 'seconds',
         desafio: {

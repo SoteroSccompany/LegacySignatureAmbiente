@@ -282,7 +282,7 @@ class loginUser {
         const porta_logica = req.socket.remotePort;
         const sha = new SHA();
         const plainSecret = sha.decrypt(user.codigo_hash);
-        const codigoEsperado = await authenticator.generate({ secret: plainSecret, epochTolerance: 120 });
+        const codigoEsperado = await authenticator.generate({ secret: plainSecret, epochTolerance: 60 });
         if (statusAplication.status !== statusApp.prod) console.log(`Código de dois fatores para o usuário ${user.email}: ${codigoEsperado}`);
         const desafio_hash = sha.hash(codigoEsperado);
         const userAgent = sha.encrypt(req.headers['user-agent']);

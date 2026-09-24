@@ -222,7 +222,7 @@ module.exports = {
         limit: 20
     },
     confiDoisFatores: {
-        time: 30,
+        time: 60,
         timeSetup: 120,
         timeType: 'seconds',
         desafio: {

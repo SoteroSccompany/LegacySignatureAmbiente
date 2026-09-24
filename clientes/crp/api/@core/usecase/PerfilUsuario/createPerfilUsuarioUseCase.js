@@ -31,7 +31,7 @@ class createPerfilUsuarioUseCase {
             const encryptAgent = sha.encrypt(data.userAgent);
             const desafio = new domainDesafio({ ...data, tipo_desafio: confiDoisFatores.desafio.perfilUsuario, solicitacao_user_agent_hash: encryptAgent });
             const plainSecret = sha.decrypt(checkUsuario.user.codigo_hash);
-            const authCode = await authenticator.generate({ secret: plainSecret, epochTolerance: 120 });
+            const authCode = await authenticator.generate({ secret: plainSecret, epochTolerance: 60 });
             if (statusApp.dev === statusAplication.status) {
                 console.log(authCode)
             }
@@ -101,7 +101,7 @@ class createPerfilUsuarioUseCase {
             if ((statusApp.prod === statusAplication.status) && (hashToken !== desafio.desafio_hash)) return { status: false, msg: "Código inválido" }
             const plainSecret = sha.decrypt(user.codigo_hash);
             const isValid = await authenticator.verify({
-                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName
+                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName, epochTolerance: 60
             });
             if (!isValid.valid) return { status: false, msg: "Código de autenticação inválido." }
             const encryptAgent = sha.encrypt(data.userAgent);

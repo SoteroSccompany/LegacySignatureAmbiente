@@ -172,7 +172,7 @@ class createAssinaturaUseCase {
                     }
                 }
                 const plainSecret = sha.decrypt(user.codigo_hash);
-                const code = await authenticator.generate({ secret: plainSecret });
+                const code = await authenticator.generate({ secret: plainSecret, epochTolerance: 60 });
                 const desafio = new domainDesafio({
                     user_id: user.id,
                     document_id: data.documento_id,
@@ -360,7 +360,7 @@ class createAssinaturaUseCase {
                 }
                 const plainSecret = sha.decrypt(usuario.codigo_hash);
                 const isValid = await authenticator.verify({
-                    token: data.token, secret: plainSecret, label: `${applicationName}:${usuario.email}`, issuer: applicationName
+                    token: data.token, secret: plainSecret, label: `${applicationName}:${usuario.email}`, issuer: applicationName, epochTolerance: 60
                 });
                 if ((isValid.valid === false) && (statusApp.prod === statusAplication.status)) {
                     await trx.rollback();

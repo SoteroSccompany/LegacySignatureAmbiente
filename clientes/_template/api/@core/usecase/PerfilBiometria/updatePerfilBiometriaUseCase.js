@@ -62,7 +62,7 @@ class updatePerfilBiometriaUseCase {
             const desafio = new domainDesafio({ ...data, tipo_desafio: confiDoisFatores.desafio.resposta_solicitacao_perfil_biometria, solicitacao_user_agent_hash: encryptAgent });
             // Código de aprovação é do 2FA de quem está aprovando (sessão), não do usuário avaliado.
             const plainSecret = sha.decrypt(checkAprovador.user.codigo_hash);
-            const authCode = await authenticator.generate({ secret: plainSecret, epochTolerance: 120 });
+            const authCode = await authenticator.generate({ secret: plainSecret, epochTolerance: 60 });
             if (statusApp.dev === statusAplication.status) {
                 console.log(authCode)
             }
@@ -160,7 +160,7 @@ class updatePerfilBiometriaUseCase {
             // Código de aprovação é do 2FA de quem está aprovando (sessão), não do usuário avaliado.
             const plainSecret = sha.decrypt(aprovador.codigo_hash);
             const isValid = await authenticator.verify({
-                token: data.token, secret: plainSecret, label: `${applicationName}:${aprovador.email}`, issuer: applicationName
+                token: data.token, secret: plainSecret, label: `${applicationName}:${aprovador.email}`, issuer: applicationName, epochTolerance: 60
             });
             if (statusApp.prod === statusAplication.status) {
                 if (!isValid.valid) return { status: false, msg: "Código de autenticação inválido." }

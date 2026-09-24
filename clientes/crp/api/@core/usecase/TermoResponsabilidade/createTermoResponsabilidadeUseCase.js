@@ -31,7 +31,7 @@ class createTermoResponsabilidadeUseCase {
             if (user.role !== roles.admin) return { status: false, msg: "Acesso negado. Apenas administradores podem solicitar termo de responsabilidade." }
             const sha = new SHA();
             const plainSecrete = await sha.decrypt(user.codigo_hash)
-            const code = await authenticator.generate({ secret: plainSecrete })
+            const code = await authenticator.generate({ secret: plainSecrete, epochTolerance: 60 })
             const encryptAgent = sha.encrypt(data.userAgent);
             const desafio = new domainDesafio({ ...data, tipo_desafio: confiDoisFatores.desafio.cadastro_termo_responsabilidade, solicitacao_user_agent_hash: encryptAgent });
             if (statusAplication.status === statusApp.dev) {
@@ -93,7 +93,7 @@ class createTermoResponsabilidadeUseCase {
             if ((statusApp.prod === statusAplication.status) && (hashToken !== desafio.desafio_hash)) return { status: false, msg: "Código inválido" }
             const plainSecret = sha.decrypt(user.codigo_hash);
             const isValid = await authenticator.verify({
-                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName
+                token: data.token, secret: plainSecret, label: `${applicationName}:${user.email}`, issuer: applicationName, epochTolerance: 60
             });
             if (!isValid.valid) return { status: false, msg: "Código de autenticação inválido." }
             const encryptAgent = sha.encrypt(data.request_user.userAgent);

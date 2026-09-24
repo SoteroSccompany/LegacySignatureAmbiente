@@ -43,9 +43,7 @@ function createTransporter() {
 const transporter = createTransporter();
 
 function fromAddress() {
-    const mail = isDev
-        ? (process.env.MAIL || 'noreply@legacysignature.local')
-        : process.env.MAIL;
+    const mail = bussines.email;
     return `"${bussines.nameCompany}" <${mail}>`;
 }
 
