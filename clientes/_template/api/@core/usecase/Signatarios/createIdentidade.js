@@ -70,7 +70,7 @@ class CreateIdentidadeUsecase {
                     user_id: metadado.user_id
                 }));
                 const profile = await this.CreateProfileSignatario([item], metadado, historicoArray);
-                if (!profile) return false
+                if (!profile || profile.status === false) return false
             }
             return true;
         } catch (err) {
@@ -98,6 +98,8 @@ class CreateIdentidadeUsecase {
         try {
             const ladgerPerfil = new LedgertPerfil(this.#trx);
             for await (const item of data) {
+                if (!item.cpf) continue;
+                if (!item.telefone) return false;
                 const cpf_bindex = this.#sha.generateBlindIndex(item.cpf);
                 const cpf_encrypt = this.#sha.encrypt(item.cpf);
                 const domain = new domainPerfil({

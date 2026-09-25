@@ -456,25 +456,40 @@ class createSignatariosUseCase {
         const semCadastro = [];
         for await (const item of this.payload) {
             const dataSignatario = item.data;
-            const cpf_bindex = sha.generateBlindIndex(dataSignatario.cpf);
-            const [checkPerfilCpf, checkUsuario] = await Promise.all([
-                repositorioPerfil.getPerfilUsuarioByCpf({ cpf_bindex }),
-                repositorioUsuario.getByEmail({ email: dataSignatario.email })
-            ]);
-            if (!checkPerfilCpf.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
+            if (dataSignatario.cpf) {
+                const cpf_bindex = sha.generateBlindIndex(dataSignatario.cpf);
+                const [checkPerfilCpf, checkUsuario] = await Promise.all([
+                    repositorioPerfil.getPerfilUsuarioByCpf({ cpf_bindex }),
+                    repositorioUsuario.getByEmail({ email: dataSignatario.email })
+                ]);
+                if (!checkPerfilCpf.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
+                if (!checkUsuario.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
+                if (checkPerfilCpf.exit && checkUsuario.exit) cadastrado.push({ ...dataSignatario, perfil_id: checkPerfilCpf.data.id, user_id: checkUsuario.data.id });
+                if (!checkPerfilCpf.exit && checkUsuario.exit) usuarioCadastrado.push({ ...dataSignatario, user_id: checkUsuario.data.id })
+                if (!checkPerfilCpf.exit && !checkUsuario.exit) semCadastro.push({ ...dataSignatario })
+                continue;
+            }
+            // Sem CPF no payload: só sabemos o e-mail. Confere se já existe usuário e,
+            // se existir, se ele já tem perfil (não dá pra buscar por CPF, ele ainda não foi informado).
+            const checkUsuario = await repositorioUsuario.getByEmail({ email: dataSignatario.email });
             if (!checkUsuario.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
-            if (checkPerfilCpf.exit && checkUsuario.exit) cadastrado.push({ ...dataSignatario, perfil_id: checkPerfilCpf.data.id, user_id: checkUsuario.data.id });
-            if (!checkPerfilCpf.exit && checkUsuario.exit) usuarioCadastrado.push({ ...dataSignatario, user_id: checkUsuario.data.id })
-            if (!checkPerfilCpf.exit && !checkUsuario.exit) semCadastro.push({ ...dataSignatario })
+            if (!checkUsuario.exit) {
+                semCadastro.push({ ...dataSignatario });
+                continue;
+            }
+            const checkPerfilUsuario = await repositorioPerfil.getPerfilUsuarioByUserId({ user_id: checkUsuario.data.id });
+            if (!checkPerfilUsuario.status) return { status: false, msg: "Ocorreu um erro interno, tente novamente em instantes." }
+            if (checkPerfilUsuario.exit) cadastrado.push({ ...dataSignatario, perfil_id: checkPerfilUsuario.data.id, user_id: checkUsuario.data.id });
+            if (!checkPerfilUsuario.exit) usuarioCadastrado.push({ ...dataSignatario, user_id: checkUsuario.data.id });
         }
         if (usuarioCadastrado.length > 0 || semCadastro.length > 0) {
             const identidade = new CreateIdentidadeUsecase({ trx, sha });
             if (usuarioCadastrado.length > 0) {
                 const metadadoPerfil = { ...this.metadado, acao: 'criar_perfil_signatario' };
                 const result = await identidade.CreateProfileSignatario(usuarioCadastrado, metadadoPerfil, this.historico);
-                if (!result) return { status: false, msg: "Não foi possível criar o perfil dos signatários. Tente novamente em instantes." }
+                if (!result || result.status === false) return { status: false, msg: "Não foi possível criar o perfil dos signatários. Tente novamente em instantes." }
                 this.payload = this.payload.map((item) => {
-                    const found = usuarioCadastrado.find((u) => u.cpf === item.data.cpf);
+                    const found = usuarioCadastrado.find((u) => u.email === item.data.email);
                     if (found) {
                         return {
                             ...item, data: {
@@ -489,9 +504,9 @@ class createSignatariosUseCase {
             if (semCadastro.length > 0) {
                 const metadadoCadastro = { ...this.metadado, acao: 'criar_usuario_signatario' };
                 const result = await identidade.CreateUsuarioSignatario(semCadastro, metadadoCadastro, this.historico);
-                if (!result) return { status: false, msg: "Não foi possível criar o perfil dos signatários. Tente novamente em instantes." }
+                if (!result || result.status === false) return { status: false, msg: "Não foi possível criar o perfil dos signatários. Tente novamente em instantes." }
                 this.payload = this.payload.map((item) => {
-                    const found = semCadastro.find((u) => u.cpf === item.data.cpf);
+                    const found = semCadastro.find((u) => u.email === item.data.email);
                     if (found) return { ...item, data: { ...item.data, perfil_id: found.perfil_id, user_id: found.user_id, acao: "criar_conta", senhaEmail: found.senhaEmail } };
                     return item;
                 });
@@ -499,7 +514,7 @@ class createSignatariosUseCase {
         }
         if (cadastrado.length > 0) {
             this.payload = this.payload.map((item) => {
-                const found = cadastrado.find((u) => u.cpf === item.data.cpf);
+                const found = cadastrado.find((u) => u.email === item.data.email);
                 if (found) return { ...item, data: { ...item.data, perfil_id: found.perfil_id, user_id: found.user_id, acao: "convite" } };
                 return item;
             });
@@ -542,16 +557,17 @@ class createSignatariosUseCase {
             const telefone = (item.data.telefone || '').trim();
             const telefoneDigits = telefone.replace(/\D/g, '');
             if (!nome) return { status: false, msg: `Nome obrigatório no signatário ${i + 1}.` }
-            if (!telefoneDigits) return { status: false, msg: `Telefone é um campo obrigatório. Ausente no signatario ${nome}.` }
-            if (telefoneDigits.length < 10 || telefoneDigits.length > 11) return { status: false, msg: `Telefone inválido no signatário ${nome}.` }
+            if (telefoneDigits && (telefoneDigits.length < 10 || telefoneDigits.length > 11)) return { status: false, msg: `Telefone inválido no signatário ${nome}.` }
             if (!email || !EMAIL_REGEX.test(email)) return { status: false, msg: `E-mail inválido no signatário ${i + 1}.` }
-            if (cpfDigits.length !== 11) return { status: false, msg: `CPF inválido no signatário ${i + 1}.` }
-            if (cpfs.has(cpfDigits)) return { status: false, msg: `CPF duplicado na lista de signatários.` }
+            if (cpfDigits && cpfDigits.length !== 11) return { status: false, msg: `CPF inválido no signatário ${i + 1}.` }
+            // CPF no payload cria perfil agora; tab_perfil_usuario.telefone é NOT NULL.
+            if (cpfDigits && !telefoneDigits) return { status: false, msg: `Telefone é obrigatório quando o CPF é informado no signatário ${nome}.` }
+            if (cpfDigits && cpfs.has(cpfDigits)) return { status: false, msg: `CPF duplicado na lista de signatários.` }
             if (emails.has(email)) return { status: false, msg: `E-mail duplicado na lista de signatários.` }
-            if (telefones.has(telefoneDigits)) return { status: false, msg: `Telefone duplicado na lista de signatários.` }
-            cpfs.add(cpfDigits);
+            if (telefoneDigits && telefones.has(telefoneDigits)) return { status: false, msg: `Telefone duplicado na lista de signatários.` }
+            if (cpfDigits) cpfs.add(cpfDigits);
             emails.add(email);
-            telefones.add(telefoneDigits);
+            if (telefoneDigits) telefones.add(telefoneDigits);
             if (!Array.isArray(item.sign) || item.sign.length === 0 || item.sign.length > 1) return { status: false, msg: `Signatário ${nome} precisa de uma demarcação.` }
             const signs = [];
             for (let j = 0; j < item.sign.length; j++) {

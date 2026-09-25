@@ -367,8 +367,10 @@ const NovaSolicitacao = () => {
           return (
             s.nome &&
             /\S+@\S+\.\S+/.test(s.email) &&
-            (jsonConfig.uiMock || isValidCpf(s.cpf)) &&
-            (jsonConfig.uiMock || isValidTelefone(normalizarTelefone(s.telefone)))
+            (jsonConfig.uiMock || !s.cpf || isValidCpf(s.cpf)) &&
+            (jsonConfig.uiMock || !s.telefone || isValidTelefone(normalizarTelefone(s.telefone))) &&
+            // CPF no payload cria perfil agora; telefone é NOT NULL no perfil.
+            (jsonConfig.uiMock || !onlyDigits(s.cpf || "") || isValidTelefone(normalizarTelefone(s.telefone || "")))
           );
         }) &&
         semDuplicados(lista)

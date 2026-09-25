@@ -181,7 +181,7 @@ const LinhaCadastroSignatario = ({
             </div>
             <div>
               <label className="block text-xs font-semibold text-brand-soft mb-1">
-                CPF
+                CPF (opcional)
               </label>
               <input
                 value={formatCpf(signatario.cpf)}
@@ -196,7 +196,7 @@ const LinhaCadastroSignatario = ({
             </div>
             <div>
               <label className="block text-xs font-semibold text-brand-soft mb-1">
-                Telefone
+                Telefone (opcional)
               </label>
               <input
                 value={signatario.telefone || ""}
@@ -214,6 +214,9 @@ const LinhaCadastroSignatario = ({
               <TrashIcon className="w-5 h-5" />
             </button>
           </div>
+          <p className="text-xs text-brand-soft m-0 mt-1">
+            Se não souber agora, o próprio signatário completa ao acessar o link.
+          </p>
         </>
       ) : (
         <div className="flex items-center justify-between gap-3">

@@ -128,17 +128,17 @@ class AplicarAssinatura {
                 .where('signatario_id', signatarioTravado.id)
                 .andWhere('deletado', false);
 
-            const modo = payload.modo || signatarioTravado.modo_visual || modoEstampaAssinatura.dados;
+            const modo = signatarioTravado.modo_visual || payload.modo || modoEstampaAssinatura.dados;
             let imagemPngBytes = null;
             if (modo === modoEstampaAssinatura.desenho) {
-                const estampaName = payload.estampa_object_name || signatarioTravado.estampa_object_name;
+                const estampaName = signatarioTravado.estampa_object_name || payload.estampa_object_name;
                 if (!estampaName) return await this.#finalizarSemRetentativa('Estampa PNG ausente para modo DESENHO');
                 const estampa = await bucketGateway.Wip().obterArquivo({ objectName: estampaName });
                 if (!estampa.status) return await this.#finalizarComRetentativa(estampa.msg, signatario);
                 imagemPngBytes = await streamToBuffer(estampa.data.stream);
             }
 
-            let textoEstampa = payload.estampa_texto || parseJsonField(signatarioTravado.estampa_texto_json);
+            let textoEstampa = parseJsonField(signatarioTravado.estampa_texto_json) || payload.estampa_texto;
             if (!textoEstampa) {
                 textoEstampa = {
                     nome: signatarioTravado.nome,
@@ -714,7 +714,7 @@ class AplicarAssinatura {
             const metadata = {
                 signatario_id: signatario.id,
                 user_id: payload.user_id || signatario.user_id,
-                modo: payload.modo || signatario.modo_visual,
+                modo: signatario.modo_visual || payload.modo,
                 object_name: objectName,
                 hash_pdf: hash_apos_estampa,
                 carimbo: carimbo || null,

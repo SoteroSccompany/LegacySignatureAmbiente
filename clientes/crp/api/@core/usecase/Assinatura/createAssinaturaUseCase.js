@@ -205,6 +205,19 @@ class createAssinaturaUseCase {
             }
             if (!desafio || desafio.tipo_desafio !== confiDoisFatores.desafio.assinatura || desafio.usado !== 1 && desafio.usado !== true
                 || desafio.user_id !== data.user_id || desafio.document_id !== data.documento_id) return { status: false, msg: 'Autenticação do documento não confirmada.' }
+            // Reconferência independente: mesmo com biometria confirmada, o desafio de 2FA/assinatura
+            // tem que estar de fato confirmado — não basta o desafio_id pendurado na identificação.
+            const desafiAutenticacao = await knex('tab_desafio_autenticacao')
+                .select('id', 'tipo_desafio', 'usado', 'user_id', 'document_id')
+                .where('user_id', data.user_id)
+                .andWhere('document_id', data.documento_id)
+                .andWhere('tipo_desafio', confiDoisFatores.desafio.assinatura)
+                .andWhere('usado', true)
+                .andWhere('deletado', false)
+                .orderBy('criado_em', 'desc')
+                .first();
+            if (!desafiAutenticacao || desafiAutenticacao.tipo_desafio !== confiDoisFatores.desafio.assinatura || desafiAutenticacao.usado !== 1 && desafiAutenticacao.usado !== true
+                || desafiAutenticacao.user_id !== data.user_id || desafiAutenticacao.document_id !== data.documento_id) return { status: false, msg: 'Autenticação do documento não confirmada.' }
             const evento = await knex('tab_evento').select('id', 'tipo', 'documento_id', 'signatario_id').where('id', data.id).andWhere('deletado', false).first();
             if (!evento || evento.tipo !== eventoSistema.tipos.estampa_upload_solicitada || evento.documento_id !== data.documento_id || evento.signatario_id !== data.signatario_id) return { status: false, msg: 'Identificador do processo de assinatura inválido.' }
             // Assinado/processando não bloqueia: idempotente, devolve sucesso pro front seguir pro /status.
@@ -557,6 +570,21 @@ class createAssinaturaUseCase {
             }
             if (!desafio || desafio.tipo_desafio !== confiDoisFatores.desafio.assinatura || desafio.usado !== 1 && desafio.usado !== true
                 || desafio.user_id !== data.user_id || desafio.document_id !== data.documento_id) {
+                return { status: false, msg: 'Autenticação do documento não confirmada.' }
+            }
+            // Reconferência independente: mesmo com biometria confirmada, o desafio de 2FA/assinatura
+            // tem que estar de fato confirmado — não basta o desafio_id pendurado na identificação.
+            const desafiAutenticacao = await knex('tab_desafio_autenticacao')
+                .select('id', 'tipo_desafio', 'usado', 'user_id', 'document_id')
+                .where('user_id', data.user_id)
+                .andWhere('document_id', data.documento_id)
+                .andWhere('tipo_desafio', confiDoisFatores.desafio.assinatura)
+                .andWhere('usado', true)
+                .andWhere('deletado', false)
+                .orderBy('criado_em', 'desc')
+                .first();
+            if (!desafiAutenticacao || desafiAutenticacao.tipo_desafio !== confiDoisFatores.desafio.assinatura || desafiAutenticacao.usado !== 1 && desafiAutenticacao.usado !== true
+                || desafiAutenticacao.user_id !== data.user_id || desafiAutenticacao.document_id !== data.documento_id) {
                 return { status: false, msg: 'Autenticação do documento não confirmada.' }
             }
             // Presign antes da trx: se a URL falhar, não deixa evento órfão.
