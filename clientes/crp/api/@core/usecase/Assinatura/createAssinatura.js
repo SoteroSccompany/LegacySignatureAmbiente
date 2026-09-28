@@ -53,11 +53,19 @@ class createAssinaturaUseCase {
             try {
                 const documento = await trx('tab_documentos').select('*').where('id', data.documento_id).first();
                 if (!documento) throw new ErrorCreateSignatario('Documento não localizado ou não disponível para assinatura.');
+                let exigeBiometria = assinaturaSessao.biometriaObrigatoria;
+                if (!exigeBiometria) {
+                    const solicitacaoMeta = await trx('tab_solicitacao_documento').select('meta_dados').where('documento_id', data.documento_id).first();
+                    if (solicitacaoMeta && solicitacaoMeta.meta_dados != null) {
+                        const meta = typeof solicitacaoMeta.meta_dados === 'string' ? JSON.parse(solicitacaoMeta.meta_dados) : solicitacaoMeta.meta_dados;
+                        exigeBiometria = meta != null && meta.reconhecimento_facial === true;
+                    }
+                }
                 const user = await trx('tab_usuarios').select('*').where('id', data.user_id).andWhere('deletado', false).first();
                 if (!user) throw new ErrorCreateSignatario('Usuário não localizado.');
                 const perfil = await trx('tab_perfil_usuario').select('*').where('user_id', user.id).andWhere('deletado', false).first();
                 if (!perfil) throw new ErrorCreateSignatario('Perfil não cadastrado, complete seu cadastro antes de assinar o documento.', null, { next_step: 'CRIAR_PERFIL' });
-                const checkBiometria = await this.#biometriaCadastrada(perfil.id, trx);
+                const checkBiometria = await this.#biometriaCadastrada(perfil.id, trx, true, exigeBiometria);
                 if (!checkBiometria.status) throw new ErrorCreateSignatario(checkBiometria.msg, null, checkBiometria.data);
 
 
@@ -136,10 +144,10 @@ class createAssinaturaUseCase {
                             }
                         }
                     }
-                    // Biometria desligada: não existe identificacaoAnterior (nunca é criada
-                    // nesse modo) — o próprio desafio já confirmado é o sinal de etapa concluída.
-                    // Reabrir a sessão nesse caso não deve descartar o OTP já validado.
-                    if (!assinaturaSessao.biometriaObrigatoria && (desafioAnterior.usado === 1 || desafioAnterior.usado === true)) {
+                    // Biometria não exigida neste documento: não existe identificacaoAnterior
+                    // (nunca é criada nesse modo) — o próprio desafio já confirmado é o sinal
+                    // de etapa concluída. Reabrir a sessão não deve descartar o OTP já validado.
+                    if (!exigeBiometria && (desafioAnterior.usado === 1 || desafioAnterior.usado === true)) {
                         session.user.assinatura = {
                             documento_id: data.documento_id,
                             signatario_id: signatario.id,
@@ -258,6 +266,14 @@ class createAssinaturaUseCase {
             if (!sessao.user.assinatura || !sessao.user.assinatura.documento_id || !sessao.user.assinatura.signatario_id) return { status: false, msg: 'Sessão inválida para assinatura.' }
             const trx = await knex.transaction();
             try {
+                let exigeBiometria = assinaturaSessao.biometriaObrigatoria;
+                if (!exigeBiometria) {
+                    const solicitacaoMeta = await trx('tab_solicitacao_documento').select('meta_dados').where('documento_id', sessao.user.assinatura.documento_id).first();
+                    if (solicitacaoMeta && solicitacaoMeta.meta_dados != null) {
+                        const meta = typeof solicitacaoMeta.meta_dados === 'string' ? JSON.parse(solicitacaoMeta.meta_dados) : solicitacaoMeta.meta_dados;
+                        exigeBiometria = meta != null && meta.reconhecimento_facial === true;
+                    }
+                }
                 const desafio = await trx('tab_desafio_autenticacao').select('*').where('user_id', sessao.user.id)
                     .andWhere('tipo_desafio', confiDoisFatores.desafio.assinatura)
                     .andWhere('usado', false)
@@ -265,10 +281,10 @@ class createAssinaturaUseCase {
                     .orderBy('criado_em', 'desc')
                     .first();
                 if (!desafio) {
-                    // Biometria desligada: não existe tab_identificacao_biometrica pra consultar —
+                    // Biometria não exigida neste documento: não existe tab_identificacao_biometrica —
                     // um desafio já confirmado (2ª chamada do /2fa, refresh etc.) é o próprio sinal
                     // de etapa concluída, idempotente.
-                    if (!assinaturaSessao.biometriaObrigatoria) {
+                    if (!exigeBiometria) {
                         const desafioConfirmado = await trx('tab_desafio_autenticacao').select('id').where('user_id', sessao.user.id)
                             .andWhere('document_id', sessao.user.assinatura.documento_id)
                             .andWhere('tipo_desafio', confiDoisFatores.desafio.assinatura)
@@ -334,7 +350,7 @@ class createAssinaturaUseCase {
                     if (!relink.status) throw new ErrorCreateSignatario(relink.msg);
                     signatario.perfil_id = perfil.id;
                 }
-                const checkBiometria = await this.#biometriaCadastrada(perfil.id, trx);
+                const checkBiometria = await this.#biometriaCadastrada(perfil.id, trx, true, exigeBiometria);
                 if (!checkBiometria.status) throw new ErrorCreateSignatario(checkBiometria.msg, null, checkBiometria.data);
 
                 const biometria = checkBiometria.biometria;
@@ -373,9 +389,9 @@ class createAssinaturaUseCase {
                 desafio.confirmacao_user_agent_hash = data.user_agent_hash;
                 desafio.usado = true;
                 desafio.consumido_em = dateNow();
-                // Biometria desligada: OTP confirmado já encerra a autenticação — não cria
+                // Sem facial neste documento: OTP confirmado já encerra a autenticação — não cria
                 // tab_identificacao_biometrica nem pede foto, marca a sessão como validada direto.
-                const identificacao = assinaturaSessao.biometriaObrigatoria
+                const identificacao = exigeBiometria
                     ? new domainIdentificacaoBiometrica({
                         documento_id: desafio.document_id,
                         status: statusBiometriaAssinatura.aguardando_imagem,
@@ -516,11 +532,19 @@ class createAssinaturaUseCase {
                 const oldIdentificacao = { ...identificacao };
                 const documento = await trx('tab_documentos').select('*').where('id', sessao.user.assinatura.documento_id).first();
                 if (!documento) throw new ErrorCreateSignatario('Documento não localizado ou não disponível para assinatura.');
+                let exigeBiometria = assinaturaSessao.biometriaObrigatoria;
+                if (!exigeBiometria) {
+                    const solicitacaoMeta = await trx('tab_solicitacao_documento').select('meta_dados').where('documento_id', sessao.user.assinatura.documento_id).first();
+                    if (solicitacaoMeta && solicitacaoMeta.meta_dados != null) {
+                        const meta = typeof solicitacaoMeta.meta_dados === 'string' ? JSON.parse(solicitacaoMeta.meta_dados) : solicitacaoMeta.meta_dados;
+                        exigeBiometria = meta != null && meta.reconhecimento_facial === true;
+                    }
+                }
                 const user = await trx('tab_usuarios').select('*').where('id', sessao.user.id).andWhere('deletado', false).first();
                 if (!user) throw new ErrorCreateSignatario('Usuário não localizado.');
                 const perfil = await trx('tab_perfil_usuario').select('*').where('user_id', user.id).andWhere('deletado', false).first();
                 if (!perfil) throw new ErrorCreateSignatario('Perfil não cadastrado, complete seu cadastro antes de assinar o documento.', null, { next_step: 'CRIAR_PERFIL' });
-                const checkBiometria = await this.#biometriaCadastrada(perfil.id, trx);
+                const checkBiometria = await this.#biometriaCadastrada(perfil.id, trx, true, exigeBiometria);
                 if (!checkBiometria.status) throw new ErrorCreateSignatario(checkBiometria.msg, null, checkBiometria.data);
                 const login = await trx('tab_login').select('*').where('user_id', user.id).andWhere('deletado', false).first();
                 if (login && (login.session_id !== sessao.id)) {
@@ -624,11 +648,19 @@ class createAssinaturaUseCase {
             if (!data.documento_id || !data.user_id) return { status: false, msg: 'Sessão inválida.' }
             const documento = await knex('tab_documentos').select('*').where('id', data.documento_id).first();
             if (!documento) return { status: false, msg: 'Documento não localizado ou não disponível para assinatura.' }
+            let exigeBiometria = assinaturaSessao.biometriaObrigatoria;
+            if (!exigeBiometria) {
+                const solicitacaoMeta = await knex('tab_solicitacao_documento').select('meta_dados').where('documento_id', data.documento_id).first();
+                if (solicitacaoMeta && solicitacaoMeta.meta_dados != null) {
+                    const meta = typeof solicitacaoMeta.meta_dados === 'string' ? JSON.parse(solicitacaoMeta.meta_dados) : solicitacaoMeta.meta_dados;
+                    exigeBiometria = meta != null && meta.reconhecimento_facial === true;
+                }
+            }
             const user = await knex('tab_usuarios').select('*').where('id', data.user_id).andWhere('deletado', false).first();
             if (!user) return { status: false, msg: 'Usuário não localizado.' }
             const perfil = await knex('tab_perfil_usuario').select('*').where('user_id', user.id).andWhere('deletado', false).first();
             if (!perfil) return { status: false, msg: 'Perfil não cadastrado, complete seu cadastro antes de assinar o documento.', data: { next_step: 'CRIAR_PERFIL' } }
-            const checkBiometria = await this.#biometriaCadastrada(perfil.id, knex, false);
+            const checkBiometria = await this.#biometriaCadastrada(perfil.id, knex, false, exigeBiometria);
             if (!checkBiometria.status) return { status: false, msg: checkBiometria.msg, data: checkBiometria.data }
             const login = await knex('tab_login').select('*').where('user_id', user.id).andWhere('deletado', false).first();
             if (login && (login.session_id !== session.id)) {
@@ -743,10 +775,10 @@ class createAssinaturaUseCase {
                     }
                 }
             }
-            // Biometria desligada: nunca existe identificacaoAtual pra consultar — o desafio de
-            // assinatura já confirmado é o próprio sinal de etapa concluída, sem limite de tempo
-            // (mesmo espírito do identificacaoAtual.status === validado acima, que também não expira).
-            if (!assinaturaSessao.biometriaObrigatoria) {
+            // Biometria não exigida neste documento: nunca existe identificacaoAtual pra consultar —
+            // o desafio de assinatura já confirmado é o próprio sinal de etapa concluída, sem limite
+            // de tempo (mesmo espírito do identificacaoAtual.status === validado acima, que também não expira).
+            if (!exigeBiometria) {
                 const desafioConfirmado = await knex('tab_desafio_autenticacao').select('id')
                     .where('user_id', user.id)
                     .andWhere('document_id', data.documento_id)
@@ -815,10 +847,10 @@ class createAssinaturaUseCase {
     // sessão de autenticação/biometria (sessaoAssinatura, confirmarSessaoAssinatura,
     // confirmarRecebimento, carregarProgressoSessao).
 
-    async #biometriaCadastrada(perfilId, queryable, curarEmbedding = true) {
-        // ASSINATURA_BIOMETRIA_OBRIGATORIA=false: assinatura passa a exigir só o
-        // desafio de assinatura (OTP), sem perfil biométrico aprovado nem embedding.
-        if (!assinaturaSessao.biometriaObrigatoria) return { status: true, biometria: null }
+    async #biometriaCadastrada(perfilId, queryable, curarEmbedding = true, exigeBiometria = assinaturaSessao.biometriaObrigatoria) {
+        // Flag true (ou meta reconhecimento_facial): exige perfil biométrico aprovado.
+        // Sem exigência: assinatura passa só pelo desafio OTP.
+        if (!exigeBiometria) return { status: true, biometria: null }
         const biometria = await queryable('tab_perfil_biometria').select('*')
             .where('perfil_id', perfilId)
             .andWhere('deletado', false)

@@ -201,7 +201,8 @@ export const panelApi = {
 
   // Passo 1 do wizard: cria a solicitação e devolve a URL presignada de upload (PUT).
   // Contrato real (postDocumentoSolicitacao): nome_documento, documento_nome (.pdf) e termo_id são obrigatórios.
-  async createSolicitacao({ titulo, arquivo, termoId }) {
+  // reconhecimento_facial só quando a casa permite escolha (flag false); default false = só OTP.
+  async createSolicitacao({ titulo, arquivo, termoId, reconhecimento_facial }) {
     try {
       if (!arquivo || !arquivo.toLowerCase().endsWith(".pdf")) {
         return { status: false, msg: "O nome do documento deve terminar com .pdf" };
@@ -209,11 +210,15 @@ export const panelApi = {
       if (!termoId) {
         return { status: false, msg: "Selecione o termo de responsabilidade do documento." };
       }
-      const { data } = await http.post("/documentos/solicitacao", {
+      const body = {
         nome_documento: titulo,
         documento_nome: arquivo,
         termo_id: termoId,
-      });
+      };
+      if (reconhecimento_facial === true || reconhecimento_facial === false) {
+        body.reconhecimento_facial = reconhecimento_facial;
+      }
+      const { data } = await http.post("/documentos/solicitacao", body);
       return {
         status: true,
         msg: data?.msg || "Solicitação criada.",

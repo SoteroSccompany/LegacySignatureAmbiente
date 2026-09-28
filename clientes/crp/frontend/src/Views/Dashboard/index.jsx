@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DocumentTextIcon,
   PlusCircleIcon,
@@ -15,23 +15,20 @@ import TableSolicitacoes from "../../Components/Table/Solicitacoes";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getPanelService } from "../../services/panel";
-import { AuthContext } from "../../Context";
-import { can, canApproveBiometria, CAPABILITY, getRole, isBiometriaObrigatoria, ROLES } from "../../utils/roles";
+import { can, canApproveBiometria, CAPABILITY, getRole, ROLES } from "../../utils/roles";
 
 const Dashboard = () => {
   const panel = getPanelService();
-  const { states } = useContext(AuthContext);
   const role = getRole();
-  const biometriaObrigatoria = states.biometriaObrigatoria === true || isBiometriaObrigatoria();
   const cardsBiometria = [
-    biometriaObrigatoria && canApproveBiometria(role) && {
+    canApproveBiometria(role) && {
       id: 4,
       title: "Aprovação de biometria",
       description: "Perfis aguardando conferência",
       icon: ShieldCheckIcon,
       href: "/aprovacao-biometria",
     },
-    biometriaObrigatoria && {
+    {
       id: 5,
       title: "Biometria",
       description: "Cadastro do reconhecimento facial",

@@ -27,6 +27,9 @@ COPY ./package*.json ./
 # Instalando as dependências do projeto
 RUN npm install 
 
+# Instalando o PM2 globalmente
+RUN npm install -g pm2
+
 # Copiando os arquivos do projeto
 COPY ./ ./
 

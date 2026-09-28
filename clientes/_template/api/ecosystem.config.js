@@ -9,7 +9,7 @@ module.exports = {
         },
         {
             name: "worker",
-            script: "infrastructure/queue/worker/index.js",
+            script: "infrastructure/queue/workers/index.js",
             watch: false,
             log_file: "logs/worker.log",
             merge_logs: true

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../../Components/Header";
 import UploadDocumento, {
@@ -16,7 +16,8 @@ import {
   isValidTelefone,
   onlyDigits,
 } from "../../../utils/validators/identity";
-import { getSessionUser } from "../../../utils/roles";
+import { getSessionUser, isBiometriaObrigatoria } from "../../../utils/roles";
+import { AuthContext } from "../../../Context";
 import {
   criarSignatarioVazio,
   montarPayloadSignatarios,
@@ -36,8 +37,12 @@ const steps = [
 const NovaSolicitacao = () => {
   const navigate = useNavigate();
   const panel = getPanelService();
+  const { states } = useContext(AuthContext);
+  const biometriaObrigatoria =
+    states.biometriaObrigatoria === true || isBiometriaObrigatoria();
   const [step, setStep] = useState(0);
   const [titulo, setTitulo] = useState("");
+  const [reconhecimentoFacial, setReconhecimentoFacial] = useState(false);
   const [termos, setTermos] = useState([]);
   const [termoId, setTermoId] = useState("");
   const [carregandoTermos, setCarregandoTermos] = useState(true);
@@ -104,6 +109,7 @@ const NovaSolicitacao = () => {
         titulo: titulo.trim(),
         arquivo: f.name,
         termoId,
+        reconhecimento_facial: biometriaObrigatoria ? undefined : reconhecimentoFacial,
       });
       if (!criada.status || !criada.data?.id) {
         toast.error(criada.msg || "Falha ao criar solicitação.");
@@ -508,6 +514,19 @@ const NovaSolicitacao = () => {
                 placeholder="Ex.: Contrato de prestação de serviços"
               />
             </div>
+            {!biometriaObrigatoria && (
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reconhecimentoFacial}
+                  onChange={(e) => setReconhecimentoFacial(e.target.checked)}
+                  className="mt-1 rounded border-gray-300 text-brand-teal focus:ring-brand-teal"
+                />
+                <span className="text-sm text-brand-ink">
+                  Exigir reconhecimento facial neste documento
+                </span>
+              </label>
+            )}
           </div>
         )}
 

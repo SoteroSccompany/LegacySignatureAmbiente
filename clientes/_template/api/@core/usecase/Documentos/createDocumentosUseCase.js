@@ -11,7 +11,7 @@ const ErrorStackParser = require('error-stack-parser');
 const repositorioDesafio = require('../../../infrastructure/db/services/DesafioAutenticacaoRepository');
 const repositorioSolicitacao = require('../../../infrastructure/db/services/SolicitacaoDocumentoRepository');
 const repositorioLogin = require('../../../infrastructure/db/services/LoginRepositorio');
-const { confiDoisFatores, buckets, rabbitMQ, statusSolicitacao, statusAplication, statusApp, eventoAuditoria, historico, tipo_termo_responsabilidade, objetoAuditoria } = require('../../../certs/index.js');
+const { confiDoisFatores, buckets, rabbitMQ, statusSolicitacao, statusAplication, statusApp, eventoAuditoria, historico, tipo_termo_responsabilidade, objetoAuditoria, assinaturaSessao } = require('../../../certs/index.js');
 const bucketGateway = require('../../../infrastructure/gateways/Bucket/index.js');
 const urlPublicaBucket = require('../../../infrastructure/gateways/Bucket/helpers/urlPublica.js');
 const RabbitMQ = require('../../../infrastructure/gateways/rabbitmq');
@@ -83,6 +83,10 @@ class createDocumentosUseCase {
             }
             data.meta_data.nome_documento = documentoPreLoad.nome_documento;
             data.meta_data.termo_id = data.termo_id;
+            // Só grava quando a casa permite escolha por documento; flag true não escreve o campo.
+            if (!assinaturaSessao.biometriaObrigatoria) {
+                data.meta_data.reconhecimento_facial = data.reconhecimento_facial === true;
+            }
             const solicitacao = new domainSolicitacao({ ...documentoPreLoad, data_criacao: dateNow(), status: statusSolicitacao.solicitado, object_name: data.documento_nome, meta_dados: data.meta_data, sessao_id: data.meta_data.session_id });
             let pathFile = bucketGateway.Wip().applyRootPrefix(`${buckets.aplicationName}/${buckets.pastas.documento}/${solicitacao.id}`);
             solicitacao.bucket_wip_path = pathFile;

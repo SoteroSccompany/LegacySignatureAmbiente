@@ -9,7 +9,7 @@ const updateUseCase = require('../../@core/usecase/Documentos/updateDocumentosUs
 const deleteUseCase = require('../../@core/usecase/Documentos/deleteDocumentosUseCase');
 const cancelarUseCase = require('../../@core/usecase/Documentos/cancelarDocumentoUseCase');
 const historicoUseCase = require('../../@core/usecase/Historico/createHistoricoUseCase');
-const { historico } = require('../../certs')
+const { historico, assinaturaSessao } = require('../../certs')
 const SearchParams = require('../gateways/helpers/SearchParams');
 const logs = require('../../Logs')
 
@@ -125,6 +125,18 @@ class DocumentosController {
             data.nome_documento = nome_documento;
             data.documento_nome = documento_nome;
             data.termo_id = termo_id;
+            // Flag true: facial obrigatória em toda assinatura — body ignorado, campo não vai ao meta.
+            // Flag false: criador escolhe por documento; ausente = false (só OTP).
+            if (!assinaturaSessao.biometriaObrigatoria) {
+                if (req.body.reconhecimento_facial !== undefined && req.body.reconhecimento_facial !== null) {
+                    if (req.body.reconhecimento_facial !== true && req.body.reconhecimento_facial !== false) {
+                        return res.status(400).json({ status: false, msg: 'Campo reconhecimento_facial inválido.' });
+                    }
+                    data.reconhecimento_facial = req.body.reconhecimento_facial;
+                } else {
+                    data.reconhecimento_facial = false;
+                }
+            }
             if (req.integracao) data.integracao = { chave_id: req.integracao.chave_id };
             const response = await createUseCase.indexDocumentos(data, req.session)
             if (response.status) {

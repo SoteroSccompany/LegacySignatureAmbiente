@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DocumentTextIcon,
   PlusCircleIcon,
@@ -15,23 +15,20 @@ import TableSolicitacoes from "../../Components/Table/Solicitacoes";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getPanelService } from "../../services/panel";
-import { AuthContext } from "../../Context";
-import { can, canApproveBiometria, CAPABILITY, getRole, isBiometriaObrigatoria, ROLES } from "../../utils/roles";
+import { can, canApproveBiometria, CAPABILITY, getRole, ROLES } from "../../utils/roles";
 
 const Dashboard = () => {
   const panel = getPanelService();
-  const { states } = useContext(AuthContext);
   const role = getRole();
-  const biometriaObrigatoria = states.biometriaObrigatoria === true || isBiometriaObrigatoria();
   const cardsBiometria = [
-    biometriaObrigatoria && canApproveBiometria(role) && {
+    canApproveBiometria(role) && {
       id: 4,
       title: "Aprovação de biometria",
       description: "Perfis aguardando conferência",
       icon: ShieldCheckIcon,
       href: "/aprovacao-biometria",
     },
-    biometriaObrigatoria && {
+    {
       id: 5,
       title: "Biometria",
       description: "Cadastro do reconhecimento facial",
@@ -62,49 +59,49 @@ const Dashboard = () => {
   const cardActions =
     role === ROLES.SIGNER
       ? [
-        {
-          id: 1,
-          title: "Meus contratos",
-          description: "Pendentes e já assinados por você",
-          icon: FolderIcon,
-          href: "/contratos",
-        },
-        {
-          id: 2,
-          title: "Alertas",
-          description: "Convites e atualizações da sua fila",
-          icon: BellAlertIcon,
-          href: "/alertas",
-        },
-        ...cardsBiometria,
-      ]
+          {
+            id: 1,
+            title: "Meus contratos",
+            description: "Pendentes e já assinados por você",
+            icon: FolderIcon,
+            href: "/contratos",
+          },
+          {
+            id: 2,
+            title: "Alertas",
+            description: "Convites e atualizações da sua fila",
+            icon: BellAlertIcon,
+            href: "/alertas",
+          },
+          ...cardsBiometria,
+        ]
       : [
-        can(CAPABILITY.createSolicitacao) && {
-          id: 1,
-          title: "Nova solicitação",
-          description: "Envie um PDF e configure signatários",
-          icon: PlusCircleIcon,
-          href: "/solicitacoes/nova",
-        },
-        {
-          id: 2,
-          title: "Solicitações",
-          description:
-            role === ROLES.ADMIN
-              ? "Visão global de status e signatários"
-              : "Acompanhe as suas solicitações",
-          icon: DocumentTextIcon,
-          href: "/solicitacoes",
-        },
-        {
-          id: 3,
-          title: "Alertas",
-          description: "Falhas de convite e processamento",
-          icon: BellAlertIcon,
-          href: "/alertas",
-        },
-        ...cardsBiometria,
-      ].filter(Boolean);
+          can(CAPABILITY.createSolicitacao) && {
+            id: 1,
+            title: "Nova solicitação",
+            description: "Envie um PDF e configure signatários",
+            icon: PlusCircleIcon,
+            href: "/solicitacoes/nova",
+          },
+          {
+            id: 2,
+            title: "Solicitações",
+            description:
+              role === ROLES.ADMIN
+                ? "Visão global de status e signatários"
+                : "Acompanhe as suas solicitações",
+            icon: DocumentTextIcon,
+            href: "/solicitacoes",
+          },
+          {
+            id: 3,
+            title: "Alertas",
+            description: "Falhas de convite e processamento",
+            icon: BellAlertIcon,
+            href: "/alertas",
+          },
+          ...cardsBiometria,
+        ].filter(Boolean);
 
   return (
     <div className="p-4 sm:p-5">

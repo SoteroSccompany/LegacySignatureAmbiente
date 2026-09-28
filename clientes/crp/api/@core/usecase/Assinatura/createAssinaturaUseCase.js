@@ -161,7 +161,15 @@ class createAssinaturaUseCase {
             if (!user) return { status: false, msg: 'Usuário não localizado.' }
             const perfil = await knex('tab_perfil_usuario').select('*').where('user_id', user.id).andWhere('deletado', false).first();
             if (!perfil) return { status: false, msg: 'Perfil não cadastrado, complete seu cadastro antes de assinar o documento.', data: { next_step: 'CRIAR_PERFIL' } }
-            if (assinaturaSessao.biometriaObrigatoria) {
+            let exigeBiometria = assinaturaSessao.biometriaObrigatoria;
+            if (!exigeBiometria) {
+                const solicitacaoMeta = await knex('tab_solicitacao_documento').select('meta_dados').where('documento_id', data.documento_id).first();
+                if (solicitacaoMeta && solicitacaoMeta.meta_dados != null) {
+                    const meta = typeof solicitacaoMeta.meta_dados === 'string' ? JSON.parse(solicitacaoMeta.meta_dados) : solicitacaoMeta.meta_dados;
+                    exigeBiometria = meta != null && meta.reconhecimento_facial === true;
+                }
+            }
+            if (exigeBiometria) {
                 const biometria = await knex('tab_perfil_biometria').select('*').where('perfil_id', perfil.id).andWhere('deletado', false).first();
                 if (!biometria) return { status: false, msg: 'Biometria não cadastrada, complete seu cadastro antes de assinar o documento.', data: { next_step: 'CADASTRAR_BIOMETRIA' } }
                 if (!biometria.aprovado_por) return { status: false, msg: 'Cadastro biométrico em análise, aguarde a aprovação antes de assinar o documento.' }
@@ -177,11 +185,11 @@ class createAssinaturaUseCase {
             if (signatario.id !== data.signatario_id) return { status: false, msg: 'Sessão não autorizada para este documento.' }
             const termoSignatario = await knex('tab_aceite_termo_responsabilidade').select('id').where('user_id', user.id).andWhere('termo_id', documento.termo_id).andWhere('documento_id', documento.id).andWhere('deletado', false).first();
             if (!termoSignatario) return { status: false, msg: 'Termo de responsabilidade não aceito, aceite o termo antes de assinar o documento.', data: { termo_id: documento.termo_id, documento_id: documento.id, next_step: 'ACEITAR_TERMO' } }
-            // Biometria desligada: não existe linha em tab_identificacao_biometrica (nunca é criada
+            // Sem facial neste documento: não existe linha em tab_identificacao_biometrica (nunca é criada
             // nesse modo) — o desafio de assinatura confirmado é o único gate de autenticação.
             let identificacao = null;
             let desafio = null;
-            if (assinaturaSessao.biometriaObrigatoria) {
+            if (exigeBiometria) {
                 identificacao = await knex('tab_identificacao_biometrica').select('*')
                     .where('documento_id', data.documento_id)
                     .andWhere('signatario_id', signatario.id)
@@ -491,6 +499,14 @@ class createAssinaturaUseCase {
     async getStatusFotoBiometria(data) {
         try {
             if (!data.documento_id || !data.signatario_id || !data.user_id) return { status: false, msg: 'Sessão inválida.' }
+            let exigeBiometria = assinaturaSessao.biometriaObrigatoria;
+            if (!exigeBiometria) {
+                const solicitacaoMeta = await knex('tab_solicitacao_documento').select('meta_dados').where('documento_id', data.documento_id).first();
+                if (solicitacaoMeta && solicitacaoMeta.meta_dados != null) {
+                    const meta = typeof solicitacaoMeta.meta_dados === 'string' ? JSON.parse(solicitacaoMeta.meta_dados) : solicitacaoMeta.meta_dados;
+                    exigeBiometria = meta != null && meta.reconhecimento_facial === true;
+                }
+            }
             const identificacao = await knex('tab_identificacao_biometrica').select('id', 'status')
                 .where('documento_id', data.documento_id)
                 .andWhere('signatario_id', data.signatario_id)
@@ -499,7 +515,7 @@ class createAssinaturaUseCase {
                 .orderBy('data_criacao', 'desc')
                 .first();
             if (!identificacao) {
-                if (!assinaturaSessao.biometriaObrigatoria) {
+                if (!exigeBiometria) {
                     return {
                         status: true,
                         msg: 'Status da biometria da assinatura.',
@@ -531,7 +547,15 @@ class createAssinaturaUseCase {
             if (!user) return { status: false, msg: 'Usuário não localizado.' }
             const perfil = await knex('tab_perfil_usuario').select('*').where('user_id', user.id).andWhere('deletado', false).first();
             if (!perfil) return { status: false, msg: 'Perfil não cadastrado, complete seu cadastro antes de assinar o documento.', data: { next_step: 'CRIAR_PERFIL' } }
-            if (assinaturaSessao.biometriaObrigatoria) {
+            let exigeBiometria = assinaturaSessao.biometriaObrigatoria;
+            if (!exigeBiometria) {
+                const solicitacaoMeta = await knex('tab_solicitacao_documento').select('meta_dados').where('documento_id', data.documento_id).first();
+                if (solicitacaoMeta && solicitacaoMeta.meta_dados != null) {
+                    const meta = typeof solicitacaoMeta.meta_dados === 'string' ? JSON.parse(solicitacaoMeta.meta_dados) : solicitacaoMeta.meta_dados;
+                    exigeBiometria = meta != null && meta.reconhecimento_facial === true;
+                }
+            }
+            if (exigeBiometria) {
                 const biometria = await knex('tab_perfil_biometria').select('*').where('perfil_id', perfil.id).andWhere('deletado', false).first();
                 if (!biometria) return { status: false, msg: 'Biometria não cadastrada, complete seu cadastro antes de assinar o documento.', data: { next_step: 'CADASTRAR_BIOMETRIA' } }
                 if (!biometria.aprovado_por) return { status: false, msg: 'Cadastro biométrico em análise, aguarde a aprovação antes de assinar o documento.' }
@@ -542,11 +566,11 @@ class createAssinaturaUseCase {
             if (signatario.id !== data.signatario_id) return { status: false, msg: 'Sessão não autorizada para este documento.' }
             const termoSignatario = await knex('tab_aceite_termo_responsabilidade').select('id').where('user_id', user.id).andWhere('termo_id', documento.termo_id).andWhere('documento_id', documento.id).andWhere('deletado', false).first();
             if (!termoSignatario) return { status: false, msg: 'Termo de responsabilidade não aceito, aceite o termo antes de assinar o documento.', data: { termo_id: documento.termo_id, documento_id: documento.id, next_step: 'ACEITAR_TERMO' } }
-            // Biometria desligada: sem linha em tab_identificacao_biometrica, o desafio de
+            // Sem facial neste documento: sem linha em tab_identificacao_biometrica, o desafio de
             // assinatura confirmado é o único gate de autenticação (mesma regra de solicitarAssinatura).
             let identificacao = null;
             let desafio = null;
-            if (assinaturaSessao.biometriaObrigatoria) {
+            if (exigeBiometria) {
                 identificacao = await knex('tab_identificacao_biometrica').select('*')
                     .where('documento_id', data.documento_id)
                     .andWhere('signatario_id', signatario.id)

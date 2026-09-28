@@ -4,7 +4,7 @@ import { Dialog, Transition } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { Fragment, useState, useContext, useEffect, useMemo } from "react";
 import { jsonConfig } from "../../Config";
-import { can, CAPABILITY, getRole, isBiometriaObrigatoria, ROLES } from "../../utils/roles";
+import { can, CAPABILITY, getRole, ROLES } from "../../utils/roles";
 import {
   HomeIcon,
   UserIcon,
@@ -29,7 +29,6 @@ const Sidebar = () => {
   const [navigation, setNavigation] = useState([]);
   const [secondaryNavigation, setSecondaryNavigation] = useState([]);
   const role = getRole();
-  const biometriaObrigatoria = states.biometriaObrigatoria === true || isBiometriaObrigatoria();
 
   const navigationData = useMemo(() => {
     const items = [
@@ -92,7 +91,7 @@ const Sidebar = () => {
         href: "/aprovacao-biometria",
         icon: ShieldCheckIcon,
         current: false,
-        show: can(CAPABILITY.approveBiometria, role) && biometriaObrigatoria,
+        show: can(CAPABILITY.approveBiometria, role),
       },
       {
         name: "Integração",
@@ -112,7 +111,7 @@ const Sidebar = () => {
       },
     ];
     return items.filter((i) => i.show);
-  }, [role, biometriaObrigatoria]);
+  }, [role]);
 
   const secondaryNavigationData = useMemo(() => {
     const items = [
@@ -129,12 +128,11 @@ const Sidebar = () => {
         icon: FingerPrintIcon,
         current: false,
         show:
-          biometriaObrigatoria &&
-          (role === ROLES.ADMIN || role === ROLES.USER || role === ROLES.SIGNER || role === ROLES.SUPERVISOR),
+          role === ROLES.ADMIN || role === ROLES.USER || role === ROLES.SIGNER || role === ROLES.SUPERVISOR,
       },
     ];
     return items.filter((i) => i.show);
-  }, [role, biometriaObrigatoria]);
+  }, [role]);
 
   const currentItem = (clicked) => {
     setNavigation(
@@ -180,7 +178,7 @@ const Sidebar = () => {
     setNavigation(navigationData);
     setSecondaryNavigation(secondaryNavigationData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, biometriaObrigatoria]);
+  }, [role]);
 
   useEffect(() => {
     if (navigation.length) checkPath();
